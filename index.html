@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>五子棋游戏</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <div class="layout">
+            <aside class="side-panel side-panel-left">
+                <div class="panel-title">对局设置</div>
+                <div class="settings-panel">
+                    <div class="settings-group">
+                        <label>游戏模式:</label>
+                        <select id="game-mode">
+                            <option value="pvp">双人对战</option>
+                            <option value="pve">人机对战</option>
+                        </select>
+                    </div>
+                    <div class="settings-group" id="difficulty-group">
+                        <label>难度:</label>
+                        <select id="difficulty">
+                            <option value="easy">简单</option>
+                            <option value="medium" selected>中等</option>
+                            <option value="hard">困难</option>
+                        </select>
+                    </div>
+                    <div class="settings-group" id="player-role-group">
+                        <label>执棋顺序:</label>
+                        <select id="player-role">
+                            <option value="first" selected>玩家先手</option>
+                            <option value="second">玩家后手</option>
+                        </select>
+                    </div>
+                </div>
+            </aside>
+            <main class="board-area">
+                <div class="board-wrapper">
+                    <div class="board-overlay"></div>
+                    <div class="game-board" id="game-board"></div>
+                </div>
+                <div class="message" id="message"></div>
+            </main>
+            <aside class="side-panel side-panel-right">
+                <div class="panel-title">对局控制</div>
+                <div class="control-panel">
+                    <button id="new-game">新游戏</button>
+                    <button id="undo-button">悔棋</button>
+                    <div class="status" id="status">黑棋先行</div>
+                </div>
+            </aside>
+        </div>
+        <div class="result-modal" id="result-modal">
+            <div class="result-modal-backdrop"></div>
+            <div class="result-modal-dialog">
+                <div class="result-modal-title" id="result-modal-title">恭喜获胜！</div>
+                <div class="result-modal-message" id="result-modal-message"></div>
+                <div class="result-modal-actions">
+                    <button id="modal-new-game">再来一局</button>
+                    <button id="modal-close">继续观棋</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>
