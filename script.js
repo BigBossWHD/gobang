@@ -226,35 +226,45 @@ class GomokuGame {
         this.hideResultModal();
 
         if (this.moveHistory.length === 0) {
-            if (this.gameMode === 'pve' && this.currentPlayer === this.aiPlayer && !this.gameOver) {
-                this.scheduleAIMove(400);
-            }
             return; // 没有棋可悔
         }
 
-        const lastMove = this.moveHistory.pop();
-        const { x, y } = lastMove;
+        const revertLastMove = () => {
+            const move = this.moveHistory.pop();
+            if (!move) {
+                return null;
+            }
+            this.revertSingleMove(move);
+            return move;
+        };
 
-        // 清除棋盘数据
-        this.board[x][y] = null;
+        const lastMove = revertLastMove();
+        if (!lastMove) {
+            return;
+        }
 
         // 恢复游戏状态
         this.gameOver = false;
         this.winner = null;
-        this.currentPlayer = lastMove.player;
 
-        // 更新UI
-        const cell = document.querySelector(`.game-board-cell[data-x="${x}"][data-y="${y}"]`);
-        if (cell) {
-            cell.classList.remove('black', 'white');
+        if (this.gameMode === 'pve' && lastMove.player === this.aiPlayer && this.moveHistory.length > 0) {
+            const previousMove = this.moveHistory[this.moveHistory.length - 1];
+            if (previousMove.player === this.humanPlayer) {
+                revertLastMove();
+                this.currentPlayer = this.humanPlayer;
+            } else {
+                this.currentPlayer = lastMove.player;
+            }
+        } else {
+            this.currentPlayer = lastMove.player;
         }
-        
+
         this.clearLastMoveHighlight();
         if (this.moveHistory.length > 0) {
             const previousMove = this.moveHistory[this.moveHistory.length - 1];
             this.highlightLastMove(previousMove.x, previousMove.y);
         }
-        
+
         const message = document.getElementById('message');
         message.textContent = '';
 
@@ -262,6 +272,18 @@ class GomokuGame {
 
         if (this.gameMode === 'pve' && this.currentPlayer === this.aiPlayer && !this.gameOver) {
             this.scheduleAIMove(400);
+        }
+    }
+
+    revertSingleMove(move) {
+        if (!move) {
+            return;
+        }
+        const { x, y } = move;
+        this.board[x][y] = null;
+        const cell = document.querySelector(`.game-board-cell[data-x="${x}"][data-y="${y}"]`);
+        if (cell) {
+            cell.classList.remove('black', 'white', 'last-move');
         }
     }
     
