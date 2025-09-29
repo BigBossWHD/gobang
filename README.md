@@ -1,6 +1,3 @@
-<<<<<<< HEAD
-# gobang
-=======
 # 五子棋网页游戏
 
 ## 项目简介
@@ -57,4 +54,3 @@ script.js    # GomokuGame 类及所有游戏逻辑
 
 ## 部署提示
 将项目文件上传到任意静态网站托管（如 GitHub Pages、Vercel、Netlify 等）即可上线；无需服务器端依赖或打包流程。
->>>>>>> dbca291 (Initialize Gomoku web game)
