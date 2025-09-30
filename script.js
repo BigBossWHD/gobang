@@ -345,7 +345,25 @@ class GomokuGame {
         });
 
         difficultySelect.addEventListener('change', (e) => {
-            this.difficulty = e.target.value;
+            const newDifficulty = e.target.value;
+            if (newDifficulty === this.difficulty) {
+                return;
+            }
+
+            const previousDifficulty = this.difficulty;
+            const hasProgress = this.moveHistory.length > 0;
+            let shouldRestart = true;
+
+            if (hasProgress) {
+                shouldRestart = window.confirm('切换难度会重新开始本局，是否继续？');
+            }
+
+            if (shouldRestart) {
+                this.difficulty = newDifficulty;
+                this.newGame();
+            } else {
+                e.target.value = previousDifficulty;
+            }
         });
 
         playerRoleSelect.addEventListener('change', (e) => {
@@ -646,7 +664,12 @@ class GomokuGame {
                 }
             }
         }
-        
+
+        const criticalDefense = this.findCriticalDefenseMove(opponent);
+        if (criticalDefense) {
+            return criticalDefense;
+        }
+
         // 使用更深的评分和浅层搜索
         let candidates = this.getCandidateMoves(2);
         if (candidates.length < 8) {
@@ -702,6 +725,34 @@ class GomokuGame {
         }
 
         return bestMove;
+    }
+
+    findCriticalDefenseMove(opponent) {
+        const candidates = this.getCandidateMoves(3);
+        let bestMove = null;
+        let bestSeverity = 0;
+
+        for (const { x, y } of candidates) {
+            if (this.board[x][y] !== null) continue;
+
+            this.board[x][y] = opponent;
+            const lineStats = this.collectLineStats(x, y, opponent);
+            this.board[x][y] = null;
+
+            const profile = this.getThreatProfile(lineStats);
+            const severity = this.evaluateDefenseSeverity(profile);
+
+            if (severity > bestSeverity) {
+                bestSeverity = severity;
+                bestMove = { x, y };
+            }
+        }
+
+        if (bestSeverity >= 5000) {
+            return bestMove;
+        }
+
+        return null;
     }
 
     getCandidateMoves(radius = 1) {
@@ -1013,6 +1064,60 @@ class GomokuGame {
         }
 
         return bonus;
+    }
+
+    getThreatProfile(lineStats) {
+        let openFours = 0;
+        let semiOpenFours = 0;
+        let openThrees = 0;
+        let semiOpenThrees = 0;
+
+        for (const stats of lineStats) {
+            if (stats.length === 4) {
+                if (stats.openEnds === 2) {
+                    openFours++;
+                } else if (stats.openEnds === 1) {
+                    semiOpenFours++;
+                }
+            } else if (stats.length === 3) {
+                if (stats.openEnds === 2) {
+                    openThrees++;
+                } else if (stats.openEnds === 1) {
+                    semiOpenThrees++;
+                }
+            }
+        }
+
+        return { openFours, semiOpenFours, openThrees, semiOpenThrees };
+    }
+
+    evaluateDefenseSeverity(profile) {
+        const { openFours, semiOpenFours, openThrees, semiOpenThrees } = profile;
+        let severity = 0;
+
+        if (openFours >= 2) {
+            severity = Math.max(severity, 9500);
+        } else if (openFours === 1) {
+            severity = Math.max(severity, 9000);
+        }
+
+        if (semiOpenFours >= 2 || (semiOpenFours === 1 && openThrees >= 1)) {
+            severity = Math.max(severity, 8200);
+        } else if (semiOpenFours === 1) {
+            severity = Math.max(severity, 7600);
+        }
+
+        if (openThrees >= 2) {
+            severity = Math.max(severity, 7000);
+        } else if (openThrees === 1) {
+            severity = Math.max(severity, 5200);
+        }
+
+        if (semiOpenThrees >= 2) {
+            severity = Math.max(severity, 4800);
+        }
+
+        return severity;
     }
 
     collectLineStats(x, y, player) {
