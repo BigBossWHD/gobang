@@ -527,30 +527,37 @@ class GomokuGame {
             return blockingMoves[index];
         }
 
-        let bestScore = -Infinity;
-        const topMoves = [];
-
-        for (const { x, y } of candidates) {
-            const offensiveScore = this.evaluatePosition(x, y, aiPlayer);
-            const defensiveScore = this.evaluatePosition(x, y, opponent);
-            const adjacency = this.countAdjacentStones(x, y);
-            const score = this.centerBias(x, y, 30) + offensiveScore * 0.8 + defensiveScore * 0.25 + adjacency * 40 - Math.random() * 15;
-
-            if (score > bestScore + 5) {
-                bestScore = score;
-                topMoves.length = 0;
-                topMoves.push({ x, y, score });
-            } else if (Math.abs(score - bestScore) <= 5) {
-                topMoves.push({ x, y, score });
-            }
+        const urgentDefense = this.findCriticalDefenseMove(opponent, 6800, 2);
+        if (urgentDefense) {
+            return urgentDefense;
         }
 
-        if (topMoves.length === 0) {
+        const scoredMoves = candidates
+            .map(({ x, y }) => {
+                const evaluation = this.evaluateAdvancedPositionForPlayer(x, y, aiPlayer, {
+                    centerWeight: 32,
+                    offensiveMultiplier: 0.9,
+                    defensiveMultiplier: 0.45,
+                    adjacencyWeight: 36,
+                    adjacencyRadius: 1,
+                    threatWeight: 0.6,
+                    forkWeight: 0.45,
+                    defensiveThreatWeight: 0.35,
+                    defensiveForkWeight: 0.3
+                });
+                const noise = Math.random() * 18;
+                return { x, y, score: evaluation + noise };
+            })
+            .sort((a, b) => b.score - a.score);
+
+        if (scoredMoves.length === 0) {
             const index = Math.floor(Math.random() * candidates.length);
             return candidates[index];
         }
 
-        const selection = topMoves[Math.floor(Math.random() * topMoves.length)];
+        const selectionPool = scoredMoves.slice(0, Math.min(3, scoredMoves.length));
+        const selectionIndex = Math.floor(Math.random() * selectionPool.length);
+        const selection = selectionPool[selectionIndex];
         return { x: selection.x, y: selection.y };
     }
 
@@ -583,6 +590,16 @@ class GomokuGame {
             }
         }
         
+        const criticalDefense = this.findCriticalDefenseMove(opponent, 6200);
+        if (criticalDefense) {
+            return criticalDefense;
+        }
+
+        const forcingAttack = this.findForcingAttack(aiPlayer, 8800);
+        if (forcingAttack) {
+            return forcingAttack;
+        }
+
         // 否则基于评分选择最佳位置
         let candidates = this.getCandidateMoves(2);
         if (candidates.length < 6) {
@@ -599,23 +616,28 @@ class GomokuGame {
 
         for (const { x, y } of candidates) {
             const aggressiveScore = this.evaluateAdvancedPositionForPlayer(x, y, aiPlayer, {
-                centerWeight: 42,
-                offensiveMultiplier: 1.2,
-                defensiveMultiplier: 0.35,
-                adjacencyWeight: 55,
+                centerWeight: 44,
+                offensiveMultiplier: 1.32,
+                defensiveMultiplier: 0.45,
+                adjacencyWeight: 60,
                 adjacencyRadius: 2,
-                threatWeight: 0.85
+                threatWeight: 1.05,
+                forkWeight: 0.9,
+                defensiveThreatWeight: 0.65,
+                defensiveForkWeight: 0.6
             });
             const safetyScore = this.evaluateAdvancedPositionForPlayer(x, y, opponent, {
-                centerWeight: 30,
-                offensiveMultiplier: 1.05,
-                defensiveMultiplier: 0.5,
-                adjacencyWeight: 30,
+                centerWeight: 20,
+                offensiveMultiplier: 1.08,
+                defensiveMultiplier: 0.48,
+                adjacencyWeight: 36,
                 adjacencyRadius: 2,
-                threatWeight: 0.7
+                threatWeight: 0.78,
+                forkWeight: 0.6,
+                defensiveThreatWeight: 0.4,
+                defensiveForkWeight: 0.35
             });
-            const adjacency = this.countAdjacentStones(x, y);
-            const score = aggressiveScore + safetyScore * 0.5 + adjacency * 18 - Math.random() * 6;
+            const score = aggressiveScore + safetyScore * 0.55 - Math.random() * 5;
 
             if (score > bestScore) {
                 bestScore = score;
@@ -665,9 +687,14 @@ class GomokuGame {
             }
         }
 
-        const criticalDefense = this.findCriticalDefenseMove(opponent);
+        const criticalDefense = this.findCriticalDefenseMove(opponent, 5200);
         if (criticalDefense) {
             return criticalDefense;
+        }
+
+        const forcingAttack = this.findForcingAttack(aiPlayer, 9200);
+        if (forcingAttack) {
+            return forcingAttack;
         }
 
         // 使用更深的评分和浅层搜索
@@ -688,12 +715,22 @@ class GomokuGame {
             .map(({ x, y }) => ({
                 x,
                 y,
-                baseScore: this.evaluateAdvancedPosition(x, y, aiPlayer)
+                baseScore: this.evaluateAdvancedPositionForPlayer(x, y, aiPlayer, {
+                    centerWeight: 52,
+                    offensiveMultiplier: 1.45,
+                    defensiveMultiplier: 0.65,
+                    adjacencyWeight: 88,
+                    adjacencyRadius: 2,
+                    threatWeight: 1.2,
+                    forkWeight: 1.1,
+                    defensiveThreatWeight: 0.82,
+                    defensiveForkWeight: 0.75
+                })
             }))
             .sort((a, b) => b.baseScore - a.baseScore);
 
-        const searchDepth = 2;
-        const limit = Math.min(8, scoredCandidates.length);
+        const searchDepth = this.moveHistory.length < 12 ? 3 : 2;
+        const limit = Math.min(searchDepth === 3 ? 7 : 8, scoredCandidates.length);
 
         for (let index = 0; index < limit; index++) {
             const { x, y, baseScore } = scoredCandidates[index];
@@ -701,8 +738,17 @@ class GomokuGame {
 
             this.board[x][y] = aiPlayer;
             const immediateWin = this.checkWin(x, y);
+            const offensiveStats = this.collectLineStats(x, y, aiPlayer);
+            const offensiveProfile = this.getThreatProfile(offensiveStats);
+            const forkBonus = this.calculateForkBonus(offensiveStats);
+            const forcingSeverity = this.evaluateOffenseSeverity(offensiveProfile);
             let lookaheadScore;
             if (immediateWin) {
+                this.board[x][y] = null;
+                return { x, y };
+            }
+
+            if (forcingSeverity >= 9400 || forkBonus >= 20000) {
                 this.board[x][y] = null;
                 return { x, y };
             }
@@ -711,7 +757,7 @@ class GomokuGame {
             this.board[x][y] = null;
 
             const effectiveLookahead = Number.isFinite(lookaheadScore) ? lookaheadScore : 0;
-            const totalScore = effectiveLookahead + baseScore * 0.08;
+            const totalScore = effectiveLookahead + baseScore * 0.1 + forkBonus * 0.005 + forcingSeverity * 1.5;
 
             if (totalScore > bestScore) {
                 bestScore = totalScore;
@@ -727,8 +773,8 @@ class GomokuGame {
         return bestMove;
     }
 
-    findCriticalDefenseMove(opponent) {
-        const candidates = this.getCandidateMoves(3);
+    findCriticalDefenseMove(opponent, minSeverity = 5000, radius = 3) {
+        const candidates = this.getCandidateMoves(radius);
         let bestMove = null;
         let bestSeverity = 0;
 
@@ -748,7 +794,35 @@ class GomokuGame {
             }
         }
 
-        if (bestSeverity >= 5000) {
+        if (bestSeverity >= minSeverity) {
+            return bestMove;
+        }
+
+        return null;
+    }
+
+    findForcingAttack(player, minSeverity = 9000, radius = 3) {
+        const candidates = this.getCandidateMoves(radius);
+        let bestMove = null;
+        let bestSeverity = 0;
+
+        for (const { x, y } of candidates) {
+            if (this.board[x][y] !== null) continue;
+
+            this.board[x][y] = player;
+            const lineStats = this.collectLineStats(x, y, player);
+            const profile = this.getThreatProfile(lineStats);
+            const forkBonus = this.calculateForkBonus(lineStats);
+            const severity = Math.max(this.evaluateOffenseSeverity(profile), forkBonus / 3);
+            this.board[x][y] = null;
+
+            if (severity > bestSeverity) {
+                bestSeverity = severity;
+                bestMove = { x, y };
+            }
+        }
+
+        if (bestSeverity >= minSeverity) {
             return bestMove;
         }
 
@@ -899,7 +973,10 @@ class GomokuGame {
                 defensiveMultiplier: 0.45,
                 adjacencyWeight: 70,
                 adjacencyRadius: 2,
-                threatWeight: 1
+                threatWeight: 1,
+                forkWeight: 1.05,
+                defensiveThreatWeight: 0.7,
+                defensiveForkWeight: 0.65
             }
             : {
                 centerWeight: 48,
@@ -907,7 +984,10 @@ class GomokuGame {
                 defensiveMultiplier: 0.55,
                 adjacencyWeight: 60,
                 adjacencyRadius: 2,
-                threatWeight: 0.95
+                threatWeight: 0.95,
+                forkWeight: 0.95,
+                defensiveThreatWeight: 0.75,
+                defensiveForkWeight: 0.7
             };
 
         const orderedMoves = candidates
@@ -918,7 +998,9 @@ class GomokuGame {
             }))
             .sort((a, b) => maximizingPlayer ? b.score - a.score : a.score - b.score);
 
-        const moveLimit = Math.min(depth === initialDepth ? 10 : 6, orderedMoves.length);
+        const primaryWidth = initialDepth >= 3 ? 7 : 10;
+        const secondaryWidth = initialDepth >= 3 ? 5 : 6;
+        const moveLimit = Math.min(depth === initialDepth ? primaryWidth : secondaryWidth, orderedMoves.length);
         if (moveLimit === 0) {
             return this.evaluateBoardAdvantage(aiPlayer);
         }
@@ -972,15 +1054,23 @@ class GomokuGame {
         return bestValue;
     }
 
-    // 评估位置得分
-    evaluatePosition(x, y, player) {
-        if (this.board[x][y] !== null) return 0;
-        
+    analyzePlacement(x, y, player) {
+        if (this.board[x][y] !== null) {
+            return null;
+        }
+
         this.board[x][y] = player;
         const lineStats = this.collectLineStats(x, y, player);
         const score = lineStats.reduce((total, stats) => total + this.scoreLine(stats.length, stats.openEnds), 0);
         this.board[x][y] = null;
-        return score;
+
+        return { score, lineStats };
+    }
+
+    // 评估位置得分
+    evaluatePosition(x, y, player) {
+        const analysis = this.analyzePlacement(x, y, player);
+        return analysis ? analysis.score : 0;
     }
 
     // 高级位置评估
@@ -998,22 +1088,34 @@ class GomokuGame {
             defensiveMultiplier = 0.55,
             adjacencyWeight = 75,
             adjacencyRadius = 1,
-            threatWeight = 1
+            threatWeight = 1,
+            forkWeight = 1,
+            defensiveThreatWeight = 0.6,
+            defensiveForkWeight = 0.55
         } = options;
+
+        const offensiveAnalysis = this.analyzePlacement(x, y, player);
+        if (!offensiveAnalysis) {
+            return 0;
+        }
+
+        const defensiveAnalysis = this.analyzePlacement(x, y, opponent);
 
         let score = this.centerBias(x, y, centerWeight);
 
-        const offensiveScore = this.evaluatePosition(x, y, player);
-        const defensiveScore = this.evaluatePosition(x, y, opponent);
-
-        this.board[x][y] = player;
-        const offensiveStats = this.collectLineStats(x, y, player);
-        this.board[x][y] = null;
+        const { score: offensiveScore, lineStats: offensiveStats } = offensiveAnalysis;
+        const defensiveScore = defensiveAnalysis ? defensiveAnalysis.score : 0;
 
         score += offensiveScore * offensiveMultiplier;
         score += defensiveScore * defensiveMultiplier;
         score += this.countAdjacentStones(x, y, adjacencyRadius) * adjacencyWeight;
         score += this.calculateThreatBonus(offensiveStats) * threatWeight;
+        score += this.calculateForkBonus(offensiveStats) * forkWeight;
+
+        if (defensiveAnalysis) {
+            score += this.calculateThreatBonus(defensiveAnalysis.lineStats) * defensiveThreatWeight;
+            score += this.calculateForkBonus(defensiveAnalysis.lineStats) * defensiveForkWeight;
+        }
 
         return score;
     }
@@ -1061,6 +1163,40 @@ class GomokuGame {
 
         if (openTwos > 0) {
             bonus += 150 * openTwos;
+        }
+
+        return bonus;
+    }
+
+    calculateForkBonus(lineStats) {
+        const profile = this.getThreatProfile(lineStats);
+        const { openFours, semiOpenFours, openThrees, semiOpenThrees } = profile;
+        let bonus = 0;
+
+        if (openFours >= 2) {
+            bonus += 26000;
+        } else if (openFours === 1 && (openThrees >= 1 || semiOpenFours >= 1)) {
+            bonus += 12000;
+        }
+
+        if (semiOpenFours >= 2) {
+            bonus += 4200;
+        } else if (semiOpenFours === 1 && openThrees >= 1) {
+            bonus += 3200;
+        }
+
+        if (openThrees >= 2) {
+            bonus += 6500;
+        } else if (openThrees === 1 && semiOpenThrees >= 1) {
+            bonus += 2200;
+        }
+
+        if (semiOpenThrees >= 2) {
+            bonus += 1100;
+        }
+
+        if (openFours >= 1 && semiOpenThrees >= 1) {
+            bonus += 1800;
         }
 
         return bonus;
@@ -1115,6 +1251,39 @@ class GomokuGame {
 
         if (semiOpenThrees >= 2) {
             severity = Math.max(severity, 4800);
+        }
+
+        return severity;
+    }
+
+    evaluateOffenseSeverity(profile) {
+        const { openFours, semiOpenFours, openThrees, semiOpenThrees } = profile;
+        let severity = 0;
+
+        if (openFours >= 2) {
+            severity = Math.max(severity, 9800);
+        } else if (openFours === 1 && (openThrees >= 1 || semiOpenFours >= 1)) {
+            severity = Math.max(severity, 9400);
+        } else if (openFours === 1) {
+            severity = Math.max(severity, 8300);
+        }
+
+        if (semiOpenFours >= 2) {
+            severity = Math.max(severity, 8200);
+        } else if (semiOpenFours === 1 && openThrees >= 1) {
+            severity = Math.max(severity, 7800);
+        }
+
+        if (openThrees >= 2) {
+            severity = Math.max(severity, 7600);
+        } else if (openThrees === 1 && semiOpenThrees >= 1) {
+            severity = Math.max(severity, 7200);
+        } else if (openThrees === 1) {
+            severity = Math.max(severity, 6400);
+        }
+
+        if (semiOpenThrees >= 2) {
+            severity = Math.max(severity, 6100);
         }
 
         return severity;
