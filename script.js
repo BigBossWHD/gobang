@@ -692,7 +692,7 @@ class GomokuGame {
             return criticalDefense;
         }
 
-        const forcingAttack = this.findForcingAttack(aiPlayer, 9200);
+        const forcingAttack = this.findForcingAttack(aiPlayer, 8600);
         if (forcingAttack) {
             return forcingAttack;
         }
@@ -716,21 +716,21 @@ class GomokuGame {
                 x,
                 y,
                 baseScore: this.evaluateAdvancedPositionForPlayer(x, y, aiPlayer, {
-                    centerWeight: 52,
-                    offensiveMultiplier: 1.45,
-                    defensiveMultiplier: 0.65,
-                    adjacencyWeight: 88,
+                    centerWeight: 56,
+                    offensiveMultiplier: 1.72,
+                    defensiveMultiplier: 0.52,
+                    adjacencyWeight: 94,
                     adjacencyRadius: 2,
-                    threatWeight: 1.2,
-                    forkWeight: 1.1,
-                    defensiveThreatWeight: 0.82,
-                    defensiveForkWeight: 0.75
+                    threatWeight: 1.45,
+                    forkWeight: 1.28,
+                    defensiveThreatWeight: 0.7,
+                    defensiveForkWeight: 0.62
                 })
             }))
             .sort((a, b) => b.baseScore - a.baseScore);
 
         const searchDepth = this.moveHistory.length < 12 ? 3 : 2;
-        const limit = Math.min(searchDepth === 3 ? 7 : 8, scoredCandidates.length);
+        const limit = Math.min(searchDepth === 3 ? 8 : 9, scoredCandidates.length);
 
         for (let index = 0; index < limit; index++) {
             const { x, y, baseScore } = scoredCandidates[index];
@@ -742,13 +742,15 @@ class GomokuGame {
             const offensiveProfile = this.getThreatProfile(offensiveStats);
             const forkBonus = this.calculateForkBonus(offensiveStats);
             const forcingSeverity = this.evaluateOffenseSeverity(offensiveProfile);
+            const pressureScore = this.calculateOffensivePressure(offensiveStats);
+            const immediateAdvantage = this.evaluateBoardAdvantage(aiPlayer);
             let lookaheadScore;
             if (immediateWin) {
                 this.board[x][y] = null;
                 return { x, y };
             }
 
-            if (forcingSeverity >= 9400 || forkBonus >= 20000) {
+            if (forcingSeverity >= 8800 || forkBonus >= 20000 || pressureScore >= 9200) {
                 this.board[x][y] = null;
                 return { x, y };
             }
@@ -757,7 +759,12 @@ class GomokuGame {
             this.board[x][y] = null;
 
             const effectiveLookahead = Number.isFinite(lookaheadScore) ? lookaheadScore : 0;
-            const totalScore = effectiveLookahead + baseScore * 0.1 + forkBonus * 0.005 + forcingSeverity * 1.5;
+            const totalScore = effectiveLookahead * 0.55
+                + baseScore * 0.35
+                + forkBonus * 0.008
+                + forcingSeverity * 2.2
+                + pressureScore * 0.5
+                + immediateAdvantage * 0.45;
 
             if (totalScore > bestScore) {
                 bestScore = totalScore;
@@ -813,7 +820,8 @@ class GomokuGame {
             const lineStats = this.collectLineStats(x, y, player);
             const profile = this.getThreatProfile(lineStats);
             const forkBonus = this.calculateForkBonus(lineStats);
-            const severity = Math.max(this.evaluateOffenseSeverity(profile), forkBonus / 3);
+            const pressure = this.calculateOffensivePressure(lineStats);
+            const severity = Math.max(this.evaluateOffenseSeverity(profile), forkBonus / 3, pressure / 2);
             this.board[x][y] = null;
 
             if (severity > bestSeverity) {
@@ -1200,6 +1208,39 @@ class GomokuGame {
         }
 
         return bonus;
+    }
+
+    calculateOffensivePressure(lineStats) {
+        const profile = this.getThreatProfile(lineStats);
+        const { openFours, semiOpenFours, openThrees, semiOpenThrees } = profile;
+        let pressure = 0;
+
+        pressure += openFours * 8500;
+        if (openFours >= 2) {
+            pressure += 2600;
+        }
+
+        pressure += semiOpenFours * 3600;
+        if (semiOpenFours >= 2) {
+            pressure += 1800;
+        }
+
+        pressure += openThrees * 2600;
+        pressure += semiOpenThrees * 1500;
+
+        if (openThrees >= 1 && semiOpenThrees >= 1) {
+            pressure += 900;
+        }
+
+        const extendableFours = lineStats.filter(stats => stats.length === 4 && stats.openEnds === 1).length;
+        pressure += extendableFours * 2000;
+
+        const richThrees = lineStats.filter(stats => stats.length === 3 && stats.openEnds === 2).length;
+        if (richThrees >= 2) {
+            pressure += 2200;
+        }
+
+        return pressure;
     }
 
     getThreatProfile(lineStats) {
