@@ -712,10 +712,8 @@ class GomokuGame {
         }
 
         const scoredCandidates = candidates
-            .map(({ x, y }) => ({
-                x,
-                y,
-                baseScore: this.evaluateAdvancedPositionForPlayer(x, y, aiPlayer, {
+            .map(({ x, y }) => {
+                const advancedScore = this.evaluateAdvancedPositionForPlayer(x, y, aiPlayer, {
                     centerWeight: 56,
                     offensiveMultiplier: 1.72,
                     defensiveMultiplier: 0.52,
@@ -725,8 +723,18 @@ class GomokuGame {
                     forkWeight: 1.28,
                     defensiveThreatWeight: 0.7,
                     defensiveForkWeight: 0.62
-                })
-            }))
+                });
+                const analysis = this.analyzePlacement(x, y, aiPlayer);
+                const bonusStats = analysis ? analysis.lineStats : [];
+                const pressure = bonusStats.length ? this.calculateOffensivePressure(bonusStats) : 0;
+                const chainPotential = bonusStats.length ? this.calculateChainPotential(bonusStats) : 0;
+                const priorityScore = pressure * 0.55 + chainPotential * 0.9;
+                return {
+                    x,
+                    y,
+                    baseScore: advancedScore + priorityScore
+                };
+            })
             .sort((a, b) => b.baseScore - a.baseScore);
 
         const searchDepth = this.moveHistory.length < 12 ? 3 : 2;
@@ -743,6 +751,7 @@ class GomokuGame {
             const forkBonus = this.calculateForkBonus(offensiveStats);
             const forcingSeverity = this.evaluateOffenseSeverity(offensiveProfile);
             const pressureScore = this.calculateOffensivePressure(offensiveStats);
+            const chainPotential = this.calculateChainPotential(offensiveStats);
             const immediateAdvantage = this.evaluateBoardAdvantage(aiPlayer);
             let lookaheadScore;
             if (immediateWin) {
@@ -750,7 +759,7 @@ class GomokuGame {
                 return { x, y };
             }
 
-            if (forcingSeverity >= 8800 || forkBonus >= 20000 || pressureScore >= 9200) {
+            if (forcingSeverity >= 8700 || forkBonus >= 20000 || pressureScore >= 9000 || chainPotential >= 9500) {
                 this.board[x][y] = null;
                 return { x, y };
             }
@@ -764,6 +773,7 @@ class GomokuGame {
                 + forkBonus * 0.008
                 + forcingSeverity * 2.2
                 + pressureScore * 0.5
+                + chainPotential * 0.65
                 + immediateAdvantage * 0.45;
 
             if (totalScore > bestScore) {
@@ -839,6 +849,7 @@ class GomokuGame {
 
     getCandidateMoves(radius = 1) {
         const candidates = [];
+        const seen = new Set();
         let hasPieces = this.moveHistory.length > 0;
 
         if (!hasPieces) {
@@ -852,17 +863,34 @@ class GomokuGame {
             }
         }
 
-        for (let i = 0; i < this.boardSize; i++) {
-            for (let j = 0; j < this.boardSize; j++) {
-                if (this.board[i][j] !== null) continue;
+        if (!hasPieces) {
+            const center = Math.floor(this.boardSize / 2);
+            if (this.board[center][center] === null) {
+                candidates.push({ x: center, y: center });
+            }
+            return candidates;
+        }
 
-                if (!hasPieces) {
-                    continue;
-                }
+        const targetSize = Math.max(12, this.moveHistory.length * 2 + 4);
+        const maxRadius = Math.min(radius + 2, 4);
 
-                if (this.hasNeighborWithinRadius(i, j, radius)) {
+        const tryCollect = (currentRadius) => {
+            for (let i = 0; i < this.boardSize; i++) {
+                for (let j = 0; j < this.boardSize; j++) {
+                    if (this.board[i][j] !== null) continue;
+                    if (!this.hasNeighborWithinRadius(i, j, currentRadius)) continue;
+                    const key = `${i},${j}`;
+                    if (seen.has(key)) continue;
+                    seen.add(key);
                     candidates.push({ x: i, y: j });
                 }
+            }
+        };
+
+        for (let currentRadius = radius; currentRadius <= maxRadius; currentRadius++) {
+            tryCollect(currentRadius);
+            if (candidates.length >= targetSize) {
+                break;
             }
         }
 
@@ -959,7 +987,32 @@ class GomokuGame {
             adjacencyRadius: 2,
             threatWeight: 0.9
         });
-        return aiScore - opponentScore * 0.95;
+        const aiPressure = this.estimatePressurePotentialForPlayer(aiPlayer, 2);
+        const opponentPressure = this.estimatePressurePotentialForPlayer(opponent, 2);
+        const pressureDelta = aiPressure - opponentPressure * 0.92;
+        return aiScore - opponentScore * 0.95 + pressureDelta * 0.08;
+    }
+
+    estimatePressurePotentialForPlayer(player, radius = 2) {
+        const candidateMoves = this.getCandidateMoves(radius);
+        let bestPressure = 0;
+
+        for (const { x, y } of candidateMoves) {
+            if (this.board[x][y] !== null) continue;
+
+            this.board[x][y] = player;
+            const lineStats = this.collectLineStats(x, y, player);
+            const pressure = this.calculateOffensivePressure(lineStats);
+            const chainPotential = this.calculateChainPotential(lineStats);
+            this.board[x][y] = null;
+
+            const combined = pressure + chainPotential * 0.75;
+            if (combined > bestPressure) {
+                bestPressure = combined;
+            }
+        }
+
+        return bestPressure;
     }
 
     minimaxSearch(depth, alpha, beta, currentPlayer, aiPlayer, initialDepth = depth) {
@@ -1241,6 +1294,50 @@ class GomokuGame {
         }
 
         return pressure;
+    }
+
+    calculateChainPotential(lineStats) {
+        const profile = this.getThreatProfile(lineStats);
+        const { openFours, semiOpenFours, openThrees, semiOpenThrees } = profile;
+        let potential = 0;
+
+        for (const stats of lineStats) {
+            if (stats.length === 4) {
+                if (stats.openEnds === 2) {
+                    potential += 10800;
+                } else if (stats.openEnds === 1) {
+                    potential += 5200;
+                }
+            } else if (stats.length === 3) {
+                if (stats.openEnds === 2) {
+                    potential += 4600;
+                } else if (stats.openEnds === 1) {
+                    potential += 1800;
+                }
+            } else if (stats.length === 2) {
+                if (stats.openEnds === 2) {
+                    potential += 900;
+                } else if (stats.openEnds === 1) {
+                    potential += 300;
+                }
+            }
+        }
+
+        if (openFours >= 1 && openThrees >= 1) {
+            potential += 3200;
+        }
+
+        if (openThrees >= 2) {
+            potential += 5400;
+        } else if (openThrees === 1 && semiOpenThrees >= 1) {
+            potential += 2200;
+        }
+
+        if (semiOpenFours >= 2) {
+            potential += 2600;
+        }
+
+        return potential;
     }
 
     getThreatProfile(lineStats) {
