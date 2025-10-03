@@ -1727,29 +1727,55 @@ class GomokuGame {
             return this.getHardMove(aiPlayer);
         }
 
-        const payload = this.buildGrandmasterRequestPayload(aiPlayer);
+        const primaryPayload = this.buildGrandmasterRequestPayload(aiPlayer);
+        const fallbackPayload = this.buildGrandmasterFallbackPayload(aiPlayer);
+        const attempts = [
+            { payload: primaryPayload, allowResponseFormatRetry: true },
+            { payload: fallbackPayload, allowResponseFormatRetry: false }
+        ];
+
         this.llmRequestInFlight = true;
         const requestId = ++this.llmRequestSerial;
         this.activeLlmRequestId = requestId;
         this.updateLlmTestButtonState();
 
         try {
-            const { data, rawText } = await this.postChatCompletion(requestUrl, payload, apiKey);
-            if (requestId !== this.activeLlmRequestId) {
-                return null;
+            for (let i = 0; i < attempts.length; i++) {
+                const attemptConfig = attempts[i];
+                if (!attemptConfig.payload) {
+                    continue;
+                }
+
+                if (i > 0) {
+                    console.warn('Retrying grandmaster LLM with strict JSON instructions…');
+                }
+
+                const { data, rawText } = await this.postChatCompletion(
+                    requestUrl,
+                    attemptConfig.payload,
+                    apiKey,
+                    { allowResponseFormatRetry: attemptConfig.allowResponseFormatRetry }
+                );
+
+                if (requestId !== this.activeLlmRequestId) {
+                    return null;
+                }
+
+                const content = this.extractLlmMessageContent(data);
+                console.debug('Grandmaster LLM raw payload:', rawText || data);
+                console.debug('Grandmaster LLM extracted content:', content);
+                const parsedMove = this.parseLlmMove(content);
+                if (parsedMove && this.isCellAvailable(parsedMove.x, parsedMove.y)) {
+                    return parsedMove;
+                }
+
+                if (parsedMove) {
+                    console.warn('Parsed move not available on board:', parsedMove);
+                } else {
+                    console.warn('Failed to parse LLM move from content:', content);
+                }
             }
-            const content = this.extractLlmMessageContent(data);
-            console.debug('Grandmaster LLM raw payload:', rawText || data);
-            console.debug('Grandmaster LLM extracted content:', content);
-            const parsedMove = this.parseLlmMove(content);
-            if (parsedMove && this.isCellAvailable(parsedMove.x, parsedMove.y)) {
-                return parsedMove;
-            }
-            if (parsedMove) {
-                console.warn('Parsed move not available on board:', parsedMove);
-            } else {
-                console.warn('Failed to parse LLM move from content:', content);
-            }
+
             this.showInfoMessage('大模型建议的坐标无法落子，改用困难难度继续对决。');
         } catch (error) {
             console.error('Grandmaster LLM move failed:', error);
@@ -1781,6 +1807,31 @@ class GomokuGame {
                 {
                     role: 'user',
                     content: this.buildGrandmasterTurnPrompt(aiPlayer)
+                }
+            ]
+        };
+    }
+
+    buildGrandmasterFallbackPayload(aiPlayer) {
+        const reminder = '上一次回复未输出 JSON，请立刻仅返回 {"move":{"x":行索引,"y":列索引},"analysis":"攻:xx; 守:xx","banter":"8到16字自嘲"}，禁止任何前缀、解释或 reasoning。';
+        return {
+            model: this.llmConfig.model,
+            temperature: 0.1,
+            top_p: 0.5,
+            max_tokens: 160,
+            stream: false,
+            messages: [
+                {
+                    role: 'system',
+                    content: this.masterSystemPrompt
+                },
+                {
+                    role: 'user',
+                    content: this.buildGrandmasterTurnPrompt(aiPlayer)
+                },
+                {
+                    role: 'user',
+                    content: reminder
                 }
             ]
         };
@@ -2449,7 +2500,8 @@ class GomokuGame {
         }
     }
 
-    async postChatCompletion(requestUrl, payload, apiKey) {
+    async postChatCompletion(requestUrl, payload, apiKey, options = {}) {
+        const { allowResponseFormatRetry = true } = options || {};
         const headers = {
             'Content-Type': 'application/json'
         };
@@ -2477,7 +2529,7 @@ class GomokuGame {
 
         let attempt = await perform(payload);
 
-        const shouldRetryWithoutFormat = payload && payload.response_format && (!attempt.response.ok) && (
+        const shouldRetryWithoutFormat = allowResponseFormatRetry && payload && payload.response_format && (!attempt.response.ok) && (
             attempt.response.status === 400 || attempt.response.status === 404 || /response[_-]?format/i.test(attempt.rawText)
         );
 
