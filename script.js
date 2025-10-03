@@ -7,8 +7,8 @@ class GomokuGame {
         this.gameOver = false;
         this.winner = null;
         this.moveHistory = []; // 悔棋历史
-        this.gameMode = 'pvp'; // 'pvp' 或 'pve'
-        this.difficulty = 'medium'; // 'easy', 'medium', 'hard'
+        this.gameMode = 'pve'; // 默认人机对战
+        this.difficulty = 'hard'; // 默认困难
         this.lastMoveCell = null; // 记录最近一次落子的DOM节点
         this.playerRole = 'first'; // 'first' 或 'second'
         this.humanPlayer = null; // 当前玩家身份
@@ -467,6 +467,57 @@ class GomokuGame {
         return player === 'black' ? 'white' : 'black';
     }
 
+    // 从高分候选中按权重随机选择，避免每局完全固定
+    selectRandomizedMove(candidates, options = {}) {
+        if (!Array.isArray(candidates) || candidates.length === 0) {
+            return null;
+        }
+
+        const {
+            topN = 3,
+            temperature = 1.0
+        } = options;
+
+        if (temperature <= 0) {
+            return candidates[0];
+        }
+
+        const limit = Math.max(1, Math.min(topN, candidates.length));
+        const pool = candidates.slice(0, limit);
+
+        let maxScore = -Infinity;
+        let minScore = Infinity;
+        for (const move of pool) {
+            if (move.score > maxScore) {
+                maxScore = move.score;
+            }
+            if (move.score < minScore) {
+                minScore = move.score;
+            }
+        }
+
+        const span = maxScore - minScore;
+        const safeSpan = span === 0 ? 1 : span;
+        const weights = pool.map((move, index) => {
+            const normalizedScore = (move.score - minScore) / safeSpan;
+            const rankFactor = (pool.length - index) / pool.length;
+            const base = normalizedScore * 0.7 + rankFactor * 0.3 + 0.05;
+            const adjusted = Math.pow(base, 1 / Math.max(temperature, 0.05));
+            return adjusted;
+        });
+
+        const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
+        let roll = Math.random() * totalWeight;
+        for (let i = 0; i < pool.length; i++) {
+            roll -= weights[i];
+            if (roll <= 0) {
+                return pool[i];
+            }
+        }
+
+        return pool[pool.length - 1];
+    }
+
     // AI落子
     makeAIMove() {
         if (this.gameOver || this.gameMode !== 'pve' || this.currentPlayer !== this.aiPlayer) return;
@@ -545,7 +596,7 @@ class GomokuGame {
                     defensiveThreatWeight: 0.35,
                     defensiveForkWeight: 0.3
                 });
-                const noise = Math.random() * 18;
+                const noise = Math.random() * 36;
                 return { x, y, score: evaluation + noise };
             })
             .sort((a, b) => b.score - a.score);
@@ -555,17 +606,23 @@ class GomokuGame {
             return candidates[index];
         }
 
-        const selectionPool = scoredMoves.slice(0, Math.min(3, scoredMoves.length));
-        const selectionIndex = Math.floor(Math.random() * selectionPool.length);
-        const selection = selectionPool[selectionIndex];
-        return { x: selection.x, y: selection.y };
+        const selection = this.selectRandomizedMove(scoredMoves, {
+            topN: Math.min(6, scoredMoves.length),
+            temperature: 1.4
+        });
+
+        if (selection) {
+            return { x: selection.x, y: selection.y };
+        }
+
+        const index = Math.floor(Math.random() * scoredMoves.length);
+        return { x: scoredMoves[index].x, y: scoredMoves[index].y };
     }
 
     // 中等难度AI：基于评分机制
     getMediumMove(aiPlayer) {
         const opponent = this.getOpponent(aiPlayer);
-        let bestScore = -Infinity;
-        let bestMove = null;
+        const scoredMoves = [];
         
         // 检查是否有获胜或防守的机会
         for (let i = 0; i < this.boardSize; i++) {
@@ -637,20 +694,26 @@ class GomokuGame {
                 defensiveThreatWeight: 0.4,
                 defensiveForkWeight: 0.35
             });
-            const score = aggressiveScore + safetyScore * 0.55 - Math.random() * 5;
-
-            if (score > bestScore) {
-                bestScore = score;
-                bestMove = { x, y };
-            }
+            const variability = Math.random() * 24;
+            const score = aggressiveScore + safetyScore * 0.55 + variability;
+            scoredMoves.push({ x, y, score });
         }
 
-        // 如果没有找到好的位置，使用简单策略
-        if (!bestMove) {
+        if (scoredMoves.length === 0) {
             return this.getEasyMove(aiPlayer);
         }
-        
-        return bestMove;
+
+        const orderedMoves = scoredMoves.sort((a, b) => b.score - a.score);
+        const selection = this.selectRandomizedMove(orderedMoves, {
+            topN: Math.min(5, orderedMoves.length),
+            temperature: 0.85
+        });
+
+        if (selection) {
+            return { x: selection.x, y: selection.y };
+        }
+
+        return this.getEasyMove(aiPlayer);
     }
 
     // 困难难度AI：更复杂的评分和搜索
@@ -658,6 +721,7 @@ class GomokuGame {
         const opponent = this.getOpponent(aiPlayer);
         let bestScore = -Infinity;
         let bestMove = null;
+        const evaluatedMoves = [];
         
         // 检查是否有获胜的机会
         for (let i = 0; i < this.boardSize; i++) {
@@ -776,18 +840,35 @@ class GomokuGame {
                 + chainPotential * 0.65
                 + immediateAdvantage * 0.45;
 
+            const randomizedScore = totalScore + Math.random() * 120;
+
             if (totalScore > bestScore) {
                 bestScore = totalScore;
                 bestMove = { x, y };
             }
+
+            evaluatedMoves.push({ x, y, score: randomizedScore });
         }
 
-        // 如果没有找到好的位置，使用中等难度策略
-        if (!bestMove) {
+        if (evaluatedMoves.length === 0) {
             return this.getMediumMove(aiPlayer);
         }
 
-        return bestMove;
+        const orderedMoves = evaluatedMoves.sort((a, b) => b.score - a.score);
+        const selection = this.selectRandomizedMove(orderedMoves, {
+            topN: Math.min(4, orderedMoves.length),
+            temperature: 0.6
+        });
+
+        if (selection) {
+            return { x: selection.x, y: selection.y };
+        }
+
+        if (bestMove) {
+            return bestMove;
+        }
+
+        return this.getMediumMove(aiPlayer);
     }
 
     findCriticalDefenseMove(opponent, minSeverity = 5000, radius = 3) {
