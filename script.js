@@ -1729,9 +1729,11 @@ class GomokuGame {
 
         const primaryPayload = this.buildGrandmasterRequestPayload(aiPlayer);
         const fallbackPayload = this.buildGrandmasterFallbackPayload(aiPlayer);
+        const toolCallPayload = this.buildGrandmasterToolCallPayload(aiPlayer);
         const attempts = [
             { payload: primaryPayload, allowResponseFormatRetry: true },
-            { payload: fallbackPayload, allowResponseFormatRetry: false }
+            { payload: fallbackPayload, allowResponseFormatRetry: false },
+            { payload: toolCallPayload, allowResponseFormatRetry: false }
         ];
 
         this.llmRequestInFlight = true;
@@ -1746,8 +1748,10 @@ class GomokuGame {
                     continue;
                 }
 
-                if (i > 0) {
+                if (i === 1) {
                     console.warn('Retrying grandmaster LLM with strict JSON instructions…');
+                } else if (i === 2) {
+                    console.warn('Retrying grandmaster LLM with forced tool call…');
                 }
 
                 const { data, rawText } = await this.postChatCompletion(
@@ -1832,6 +1836,63 @@ class GomokuGame {
                 {
                     role: 'user',
                     content: reminder
+                }
+            ]
+        };
+    }
+
+    buildGrandmasterToolCallPayload(aiPlayer) {
+        const toolDescription = {
+            type: 'function',
+            function: {
+                name: 'submit_move',
+                description: '在候选坐标中挑选落子点并给出攻守分析。',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        x: {
+                            type: 'integer',
+                            description: '落子行索引（0-14）'
+                        },
+                        y: {
+                            type: 'integer',
+                            description: '落子列索引（0-14）'
+                        },
+                        analysis: {
+                            type: 'string',
+                            description: '攻守要点，格式为 "攻:..; 守:.."'
+                        },
+                        banter: {
+                            type: 'string',
+                            description: '8-16 字幽默自嘲语'
+                        }
+                    },
+                    required: ['x', 'y', 'analysis', 'banter']
+                }
+            }
+        };
+
+        return {
+            model: this.llmConfig.model,
+            temperature: 0.1,
+            top_p: 0.4,
+            max_tokens: 180,
+            stream: false,
+            tools: [toolDescription],
+            tool_choice: {
+                type: 'function',
+                function: {
+                    name: 'submit_move'
+                }
+            },
+            messages: [
+                {
+                    role: 'system',
+                    content: `${this.masterSystemPrompt}\n\n若系统提供了函数 submit_move，请直接调用该函数，并在 arguments 内填写坐标与攻守说明。`
+                },
+                {
+                    role: 'user',
+                    content: this.buildGrandmasterTurnPrompt(aiPlayer)
                 }
             ]
         };
