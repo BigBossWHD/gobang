@@ -1765,18 +1765,23 @@ class GomokuGame {
                     return null;
                 }
 
-                const content = this.extractLlmMessageContent(data);
+                const extracted = this.extractGrandmasterResponse(data);
                 console.debug('Grandmaster LLM raw payload:', rawText || data);
-                console.debug('Grandmaster LLM extracted content:', content);
-                const parsedMove = this.parseLlmMove(content);
-                if (parsedMove && this.isCellAvailable(parsedMove.x, parsedMove.y)) {
-                    return parsedMove;
-                }
+                console.debug('Grandmaster LLM extracted content:', extracted);
 
-                if (parsedMove) {
-                    console.warn('Parsed move not available on board:', parsedMove);
+                if (extracted && extracted.move && Number.isInteger(extracted.move.x) && Number.isInteger(extracted.move.y)) {
+                    const { x, y } = extracted.move;
+                    if (this.isCellAvailable(x, y)) {
+                        return {
+                            x,
+                            y,
+                            banter: typeof extracted.banter === 'string' ? extracted.banter : '',
+                            analysis: typeof extracted.analysis === 'string' ? extracted.analysis : ''
+                        };
+                    }
+                    console.warn('Parsed move not available on board:', extracted.move);
                 } else {
-                    console.warn('Failed to parse LLM move from content:', content);
+                    console.warn('Failed to parse LLM move from response.');
                 }
             }
 
@@ -1800,7 +1805,7 @@ class GomokuGame {
             model: this.llmConfig.model,
             temperature: 0.2,
             top_p: 0.7,
-            max_tokens: 256,
+            max_tokens: 1024,
             stream: false,
             response_format: { type: 'json_object' },
             messages: [
@@ -1822,7 +1827,7 @@ class GomokuGame {
             model: this.llmConfig.model,
             temperature: 0.1,
             top_p: 0.5,
-            max_tokens: 160,
+            max_tokens: 512,
             stream: false,
             messages: [
                 {
@@ -1876,7 +1881,7 @@ class GomokuGame {
             model: this.llmConfig.model,
             temperature: 0.1,
             top_p: 0.4,
-            max_tokens: 180,
+            max_tokens: 512,
             stream: false,
             tools: [toolDescription],
             tool_choice: {
@@ -2272,6 +2277,22 @@ class GomokuGame {
         return null;
     }
 
+    isGrandmasterCandidate(x, y) {
+        if (!Number.isInteger(x) || !Number.isInteger(y)) {
+            return false;
+        }
+        if (!this.isInsideBoard(x, y)) {
+            return false;
+        }
+        if (this.board[x][y] !== null) {
+            return false;
+        }
+        if (this.grandmasterLegalMoves instanceof Set && this.grandmasterLegalMoves.size > 0) {
+            return this.grandmasterLegalMoves.has(`${x},${y}`);
+        }
+        return true;
+    }
+
     isCellAvailable(x, y) {
         return this.isInsideBoard(x, y) && this.board[x][y] === null;
     }
@@ -2584,6 +2605,9 @@ class GomokuGame {
                 } catch (error) {
                     console.debug('LLM response is not valid JSON, raw text:', rawText);
                 }
+                if (!data && /"reasoning"\s*?:/.test(rawText)) {
+                    data = { choices: [{ message: { reasoning: rawText } }] };
+                }
             }
             return { response, rawText, data };
         };
@@ -2615,6 +2639,182 @@ class GomokuGame {
         }
 
         return attempt;
+    }
+
+    extractGrandmasterResponse(data) {
+        if (!data) {
+            return null;
+        }
+
+        const extractedContent = this.extractLlmMessageContent(data);
+        if (extractedContent) {
+            const parsed = this.parseLlmMove(extractedContent);
+            if (parsed) {
+                return {
+                    move: { x: parsed.x, y: parsed.y },
+                    analysis: parsed.analysis,
+                    banter: parsed.banter
+                };
+            }
+        }
+
+        if (Array.isArray(data.choices)) {
+            for (const choice of data.choices) {
+                const toolCalls = choice?.message?.tool_calls;
+                if (!Array.isArray(toolCalls)) {
+                    continue;
+                }
+                for (const toolCall of toolCalls) {
+                    if (!toolCall || toolCall.type !== 'function') {
+                        continue;
+                    }
+                    const fn = toolCall.function;
+                    if (!fn || fn.name !== 'submit_move') {
+                        continue;
+                    }
+                    try {
+                        const args = fn.arguments ? JSON.parse(fn.arguments) : null;
+                        if (args && Number.isInteger(args.x) && Number.isInteger(args.y)) {
+                            return {
+                                move: { x: args.x, y: args.y },
+                                analysis: typeof args.analysis === 'string' ? args.analysis : '',
+                                banter: typeof args.banter === 'string' ? args.banter : ''
+                            };
+                        }
+                    } catch (error) {
+                        console.error('Failed to parse tool call arguments:', error);
+                    }
+                }
+            }
+        }
+
+        const reasoningText = this.extractReasoningText(data);
+        if (reasoningText) {
+            const parsed = this.parseLlmMove(reasoningText);
+            if (parsed) {
+                return {
+                    move: { x: parsed.x, y: parsed.y },
+                    analysis: parsed.analysis,
+                    banter: parsed.banter
+                };
+            }
+
+            const extractedFromText = this.extractMoveFromReasoningText(reasoningText);
+            if (extractedFromText) {
+                return extractedFromText;
+            }
+        }
+
+        return null;
+    }
+
+    extractReasoningText(payload) {
+        if (!payload) {
+            return '';
+        }
+
+        const collectReasoning = (node) => {
+            if (!node) {
+                return '';
+            }
+            if (typeof node === 'string') {
+                return node;
+            }
+            if (Array.isArray(node)) {
+                return node.map((inner) => collectReasoning(inner)).join('');
+            }
+            if (typeof node === 'object') {
+                let combined = '';
+                if (typeof node.reasoning === 'string') {
+                    combined += node.reasoning;
+                }
+                if (Array.isArray(node.reasoning)) {
+                    combined += collectReasoning(node.reasoning);
+                }
+                const keys = ['value', 'text', 'content', 'message', 'data'];
+                for (const key of keys) {
+                    if (node[key]) {
+                        combined += collectReasoning(node[key]);
+                    }
+                }
+                return combined;
+            }
+            return '';
+        };
+
+        if (Array.isArray(payload.choices)) {
+            for (const choice of payload.choices) {
+                const reasoning = collectReasoning(choice?.message);
+                if (reasoning) {
+                    return reasoning;
+                }
+            }
+        }
+
+        return '';
+    }
+
+    extractMoveFromReasoningText(text) {
+        if (typeof text !== 'string' || text.length === 0) {
+            return null;
+        }
+
+        const coordinateCandidates = [];
+        const pairRegex = /[（(]\s*(\d{1,2})\s*[，,]\s*(\d{1,2})\s*[）)]/g;
+        let match;
+        while ((match = pairRegex.exec(text)) !== null) {
+            const x = Number(match[1]);
+            const y = Number(match[2]);
+            coordinateCandidates.push({ x, y });
+        }
+
+        const assignmentRegex = /x\s*[:=]\s*(\d{1,2})[^\d]{0,10}y\s*[:=]\s*(\d{1,2})/gi;
+        while ((match = assignmentRegex.exec(text)) !== null) {
+            const x = Number(match[1]);
+            const y = Number(match[2]);
+            coordinateCandidates.push({ x, y });
+        }
+
+        const uniqueCandidates = [];
+        const seen = new Set();
+        for (const candidate of coordinateCandidates) {
+            const key = `${candidate.x},${candidate.y}`;
+            if (seen.has(key)) {
+                continue;
+            }
+            seen.add(key);
+            if (this.isGrandmasterCandidate(candidate.x, candidate.y)) {
+                uniqueCandidates.push(candidate);
+            }
+        }
+
+        if (uniqueCandidates.length === 0) {
+            return null;
+        }
+
+        const buildAnalysis = () => {
+            const attackMatch = text.match(/攻[:：]\s*([^；;\n]{1,24})/);
+            const defenseMatch = text.match(/守[:：]\s*([^；;\n]{1,24})/);
+            const attack = attackMatch ? attackMatch[1].trim() : '中心续攻';
+            const defense = defenseMatch ? defenseMatch[1].trim() : '防对手延伸';
+            return `攻:${attack.slice(0, 16)}; 守:${defense.slice(0, 16)}`;
+        };
+
+        const buildBanter = () => {
+            const candidates = [
+                '大师AI又卡壳啦啦',
+                '大师AI脑袋发胀',
+                '大师AI稍微震颤'
+            ];
+            return candidates[Math.floor(Math.random() * candidates.length)];
+        };
+
+        const selected = uniqueCandidates[0];
+        return {
+            move: { x: selected.x, y: selected.y },
+            analysis: buildAnalysis(),
+            banter: buildBanter()
+        };
     }
 
     showAiThinkingMessage() {
