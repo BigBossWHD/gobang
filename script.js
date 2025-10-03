@@ -1755,11 +1755,17 @@ class GomokuGame {
                 return null;
             }
             const content = this.extractLlmMessageContent(data);
+            console.debug('Grandmaster LLM raw payload:', data);
+            console.debug('Grandmaster LLM extracted content:', content);
             const parsedMove = this.parseLlmMove(content);
             if (parsedMove && this.isCellAvailable(parsedMove.x, parsedMove.y)) {
                 return parsedMove;
             }
-
+            if (parsedMove) {
+                console.warn('Parsed move not available on board:', parsedMove);
+            } else {
+                console.warn('Failed to parse LLM move from content:', content);
+            }
             this.showInfoMessage('大模型建议的坐标无法落子，改用困难难度继续对决。');
         } catch (error) {
             console.error('Grandmaster LLM move failed:', error);
@@ -2447,6 +2453,8 @@ class GomokuGame {
 
             const data = await response.json();
             const content = (this.extractLlmMessageContent(data) || '').trim();
+            console.debug('LLM test raw payload:', data);
+            console.debug('LLM test extracted content:', content);
             if (/"status"\s*:\s*"ok"/i.test(content)) {
                 this.showInfoMessage('大模型连接正常，可开始对局。');
             } else if (content.length > 0) {
