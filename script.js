@@ -2235,11 +2235,37 @@ class GomokuGame {
             if (Array.isArray(value)) {
                 return value
                     .map((item) => extractContent(
-                        typeof item === 'string' ? item : item && (item.text ?? item.content ?? item.value ?? item.message)
+                        typeof item === 'string'
+                            ? item
+                            : item && (
+                                item.text
+                                ?? item.content
+                                ?? item.value
+                                ?? item.message
+                                ?? item.data
+                                ?? item.function?.arguments
+                            )
                     ))
                     .join('');
             }
             if (typeof value === 'object') {
+                if (typeof value.data === 'string') {
+                    return value.data;
+                }
+                if (Array.isArray(value.data)) {
+                    return extractContent(value.data);
+                }
+                if (value.data && typeof value.data === 'object') {
+                    const dataValue = extractContent(value.data.text
+                        ?? value.data.content
+                        ?? value.data.value
+                        ?? value.data.message
+                        ?? value.data.arguments
+                    );
+                    if (dataValue) {
+                        return dataValue;
+                    }
+                }
                 if (typeof value.content === 'string') {
                     return value.content;
                 }
@@ -2258,6 +2284,9 @@ class GomokuGame {
                 if (typeof value.message === 'string') {
                     return value.message;
                 }
+                if (value.function && typeof value.function.arguments === 'string') {
+                    return value.function.arguments;
+                }
             }
             return '';
         };
@@ -2275,6 +2304,17 @@ class GomokuGame {
                     if (extracted) {
                         return extracted;
                     }
+                }
+                if (Array.isArray(choice?.message?.tool_calls)) {
+                    for (const call of choice.message.tool_calls) {
+                        const extracted = extractContent(call?.function?.arguments);
+                        if (extracted) {
+                            return extracted;
+                        }
+                    }
+                }
+                if (choice?.message?.function_call && typeof choice.message.function_call.arguments === 'string') {
+                    return choice.message.function_call.arguments;
                 }
             }
         }
