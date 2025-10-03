@@ -2225,18 +2225,66 @@ class GomokuGame {
             return '';
         }
 
-        if (Array.isArray(payload.choices) && payload.choices.length > 0) {
-            const first = payload.choices[0];
-            if (first && first.message && typeof first.message.content === 'string') {
-                return first.message.content;
+        const extractContent = (value) => {
+            if (!value) {
+                return '';
             }
-            if (typeof first.text === 'string') {
-                return first.text;
+            if (typeof value === 'string') {
+                return value;
+            }
+            if (Array.isArray(value)) {
+                return value
+                    .map((item) => extractContent(
+                        typeof item === 'string' ? item : item && (item.text ?? item.content ?? item.value ?? item.message)
+                    ))
+                    .join('');
+            }
+            if (typeof value === 'object') {
+                if (typeof value.content === 'string') {
+                    return value.content;
+                }
+                if (Array.isArray(value.content)) {
+                    return extractContent(value.content);
+                }
+                if (typeof value.text === 'string') {
+                    return value.text;
+                }
+                if (Array.isArray(value.text)) {
+                    return extractContent(value.text);
+                }
+                if (typeof value.value === 'string') {
+                    return value.value;
+                }
+                if (typeof value.message === 'string') {
+                    return value.message;
+                }
+            }
+            return '';
+        };
+
+        if (Array.isArray(payload.choices)) {
+            for (const choice of payload.choices) {
+                const contentSources = [
+                    choice?.message,
+                    choice?.delta,
+                    choice?.content,
+                    choice?.text
+                ];
+                for (const source of contentSources) {
+                    const extracted = extractContent(source);
+                    if (extracted) {
+                        return extracted;
+                    }
+                }
             }
         }
 
-        if (typeof payload.output === 'string') {
-            return payload.output;
+        const fallbacks = [payload.output, payload.message, payload.data, payload.result];
+        for (const candidate of fallbacks) {
+            const extracted = extractContent(candidate);
+            if (extracted) {
+                return extracted;
+            }
         }
 
         return '';
@@ -2364,7 +2412,7 @@ class GomokuGame {
             } else if (content.length > 0) {
                 this.showInfoMessage('已收到响应，请确认模型输出格式。');
             } else {
-                this.showInfoMessage('收到空响应，请检查模型配置。');
+                this.showInfoMessage('收到空响应，请确认模型使用 Chat Completions 协议且已禁用流式输出。');
             }
         } catch (error) {
             console.error('LLM connectivity test failed:', error);
