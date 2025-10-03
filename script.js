@@ -17,9 +17,20 @@ class GomokuGame {
         this.resultModal = null;
         this.resultModalMessage = null;
         this.resultModalTitle = null;
-        
+        this.llmConfig = {
+            endpoint: '',
+            apiKey: '',
+            model: ''
+        };
+        this.llmRequestInFlight = false;
+        this.llmTestInFlight = false;
+        this.masterSystemPrompt = this.createGrandmasterSystemPrompt();
+        this.messageState = 'idle';
+        this.grandmasterLegalMoves = new Set();
+
+        this.restoreLlmConfig();
         this.updatePlayerColors();
-        
+
         // 初始化棋盘
         this.initializeBoard();
         
@@ -97,6 +108,7 @@ class GomokuGame {
             const winnerName = this.currentPlayer === 'black' ? '黑棋' : '白棋';
             const victoryText = `${winnerName} 获胜！`;
             message.textContent = victoryText;
+            this.messageState = 'info';
 
             let modalDescription = '和对手再来一局吧。';
             if (this.gameMode === 'pve') {
@@ -116,6 +128,7 @@ class GomokuGame {
         if (this.isBoardFull()) {
             this.gameOver = true;
             message.textContent = '平局！';
+            this.messageState = 'info';
             const modalDescription = this.gameMode === 'pve' ? '势均力敌，再试一次吧。' : '旗鼓相当，下局分高下。';
             this.showResultModal('平局！', modalDescription);
             this.updateStatus();
@@ -128,9 +141,10 @@ class GomokuGame {
         
         // 如果是人机对战且轮到AI，则AI落子
         if (this.gameMode === 'pve' && this.currentPlayer === this.aiPlayer && !this.gameOver) {
-            this.scheduleAIMove();
+            this.showAiThinkingMessage();
+            this.scheduleAIMove(300, { showThinking: false });
         }
-        
+
         return true;
     }
 
@@ -267,6 +281,7 @@ class GomokuGame {
 
         const message = document.getElementById('message');
         message.textContent = '';
+        this.messageState = 'idle';
 
         this.updateStatus();
 
@@ -296,6 +311,7 @@ class GomokuGame {
         this.gameOver = false;
         this.winner = null;
         this.moveHistory = [];
+        this.grandmasterLegalMoves = new Set();
 
         const message = document.getElementById('message');
         message.textContent = '';
@@ -306,6 +322,8 @@ class GomokuGame {
         if (this.gameMode === 'pve' && this.currentPlayer === this.aiPlayer && !this.gameOver) {
             this.scheduleAIMove(400);
         }
+
+        this.updateLlmTestButtonState();
     }
 
     clearLastMoveHighlight() {
@@ -332,10 +350,24 @@ class GomokuGame {
         const gameModeSelect = document.getElementById('game-mode');
         const difficultySelect = document.getElementById('difficulty');
         const playerRoleSelect = document.getElementById('player-role');
+        const llmConfigGroup = document.getElementById('llm-config-group');
+        const llmEndpointInput = document.getElementById('llm-endpoint');
+        const llmApiKeyInput = document.getElementById('llm-api-key');
+        const llmModelInput = document.getElementById('llm-model');
+        const llmTestButton = document.getElementById('llm-test');
 
         gameModeSelect.value = this.gameMode;
         difficultySelect.value = this.difficulty;
         playerRoleSelect.value = this.playerRole;
+        if (llmEndpointInput) {
+            llmEndpointInput.value = this.llmConfig.endpoint;
+        }
+        if (llmApiKeyInput) {
+            llmApiKeyInput.value = this.llmConfig.apiKey;
+        }
+        if (llmModelInput) {
+            llmModelInput.value = this.llmConfig.model;
+        }
 
         gameModeSelect.addEventListener('change', (e) => {
             this.gameMode = e.target.value;
@@ -360,6 +392,10 @@ class GomokuGame {
 
             if (shouldRestart) {
                 this.difficulty = newDifficulty;
+                this.toggleDifficultySetting();
+                if (this.gameMode === 'pve' && newDifficulty === 'grandmaster') {
+                    this.showInfoMessage('大模型模式开启，请确保配置完整且稳定。');
+                }
                 this.newGame();
             } else {
                 e.target.value = previousDifficulty;
@@ -373,19 +409,80 @@ class GomokuGame {
                 this.newGame();
             }
         });
+
+        const handleConfigChange = () => {
+            this.persistLlmConfig();
+            this.updateLlmTestButtonState();
+        };
+
+        if (llmEndpointInput) {
+            llmEndpointInput.addEventListener('input', (event) => {
+                this.llmConfig.endpoint = event.target.value.trim();
+                handleConfigChange();
+            });
+        }
+        if (llmApiKeyInput) {
+            llmApiKeyInput.addEventListener('input', (event) => {
+                this.llmConfig.apiKey = event.target.value.trim();
+                handleConfigChange();
+            });
+        }
+        if (llmModelInput) {
+            llmModelInput.addEventListener('input', (event) => {
+                this.llmConfig.model = event.target.value.trim();
+                handleConfigChange();
+            });
+        }
+
+        if (llmConfigGroup) {
+            if (this.gameMode === 'pve' && this.difficulty === 'grandmaster') {
+                llmConfigGroup.classList.remove('hidden');
+            } else {
+                llmConfigGroup.classList.add('hidden');
+            }
+        }
+
+        if (llmTestButton) {
+            llmTestButton.addEventListener('click', async () => {
+                await this.testLlmConnection();
+            });
+        }
+
+        this.updateLlmTestButtonState();
     }
 
     // 切换难度设置的显示/隐藏
     toggleDifficultySetting() {
         const difficultyGroup = document.getElementById('difficulty-group');
         const roleGroup = document.getElementById('player-role-group');
+        const llmConfigGroup = document.getElementById('llm-config-group');
         if (this.gameMode === 'pve') {
-            difficultyGroup.classList.remove('hidden');
-            roleGroup.classList.remove('hidden');
+            if (difficultyGroup) {
+                difficultyGroup.classList.remove('hidden');
+            }
+            if (roleGroup) {
+                roleGroup.classList.remove('hidden');
+            }
+            if (llmConfigGroup) {
+                if (this.difficulty === 'grandmaster') {
+                    llmConfigGroup.classList.remove('hidden');
+                } else {
+                    llmConfigGroup.classList.add('hidden');
+                }
+            }
         } else {
-            difficultyGroup.classList.add('hidden');
-            roleGroup.classList.add('hidden');
+            if (difficultyGroup) {
+                difficultyGroup.classList.add('hidden');
+            }
+            if (roleGroup) {
+                roleGroup.classList.add('hidden');
+            }
+            if (llmConfigGroup) {
+                llmConfigGroup.classList.add('hidden');
+            }
         }
+
+        this.updateLlmTestButtonState();
     }
 
     initModal() {
@@ -446,13 +543,22 @@ class GomokuGame {
         }
     }
 
-    scheduleAIMove(delay = 300) {
+    scheduleAIMove(delay = 300, options = {}) {
+        const { showThinking = true } = options;
         if (this.aiTimeoutId) {
             clearTimeout(this.aiTimeoutId);
         }
-        this.aiTimeoutId = setTimeout(() => {
+        if (showThinking) {
+            this.showAiThinkingMessage();
+        }
+        this.aiTimeoutId = setTimeout(async () => {
             this.aiTimeoutId = null;
-            this.makeAIMove();
+            try {
+                await this.makeAIMove();
+            } catch (error) {
+                console.error('AI move execution failed:', error);
+        this.showInfoMessage('AI 落子失败，已保留当前局面。');
+            }
         }, delay);
     }
 
@@ -519,7 +625,7 @@ class GomokuGame {
     }
 
     // AI落子
-    makeAIMove() {
+    async makeAIMove() {
         if (this.gameOver || this.gameMode !== 'pve' || this.currentPlayer !== this.aiPlayer) return;
         
         const aiPlayer = this.aiPlayer;
@@ -534,12 +640,20 @@ class GomokuGame {
             case 'hard':
                 move = this.getHardMove(aiPlayer);
                 break;
+            case 'grandmaster':
+                move = await this.getGrandmasterMove(aiPlayer);
+                break;
             default:
                 move = this.getMediumMove(aiPlayer);
         }
         
         if (move) {
             this.makeMove(move.x, move.y);
+            if (this.difficulty === 'grandmaster' && !this.gameOver && move.banter) {
+                this.displayGrandmasterBanter(move.banter, move.analysis);
+            } else if (!this.gameOver && this.messageState === 'thinking') {
+                this.clearMessage();
+            }
         }
     }
     
@@ -1581,6 +1695,677 @@ class GomokuGame {
             return 2;
         }
         return 0;
+    }
+
+    async getGrandmasterMove(aiPlayer) {
+        if (this.llmRequestInFlight) {
+            return this.getHardMove(aiPlayer);
+        }
+
+        const { endpoint, apiKey, model } = this.llmConfig;
+        if (!endpoint || !apiKey || !model) {
+            this.showInfoMessage('请填写完整的大模型端点、API 密钥和模型名称。');
+            return this.getHardMove(aiPlayer);
+        }
+
+        const requestUrl = this.normalizeLlmEndpoint(endpoint);
+        if (!requestUrl) {
+            this.showInfoMessage('无法识别的大模型端点，已回退为困难难度。');
+            return this.getHardMove(aiPlayer);
+        }
+
+        const payload = this.buildGrandmasterRequestPayload(aiPlayer);
+        this.llmRequestInFlight = true;
+        this.updateLlmTestButtonState();
+
+        try {
+            const response = await fetch(requestUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${apiKey}`
+                },
+                body: JSON.stringify(payload)
+            });
+
+            if (!response.ok) {
+                throw new Error(`LLM request failed with status ${response.status}`);
+            }
+
+            const data = await response.json();
+            const content = this.extractLlmMessageContent(data);
+            const parsedMove = this.parseLlmMove(content);
+            if (parsedMove && this.isCellAvailable(parsedMove.x, parsedMove.y)) {
+                return parsedMove;
+            }
+
+            this.showInfoMessage('大模型建议的坐标无法落子，改用困难难度继续对决。');
+        } catch (error) {
+            console.error('Grandmaster LLM move failed:', error);
+            this.showInfoMessage('大模型调用失败，暂以困难难度应对。');
+        } finally {
+            this.llmRequestInFlight = false;
+            this.updateLlmTestButtonState();
+        }
+
+        return this.getHardMove(aiPlayer);
+    }
+
+    buildGrandmasterRequestPayload(aiPlayer) {
+        return {
+            model: this.llmConfig.model,
+            temperature: 0.35,
+            top_p: 0.9,
+            max_tokens: 320,
+            messages: [
+                {
+                    role: 'system',
+                    content: this.masterSystemPrompt
+                },
+                {
+                    role: 'user',
+                    content: this.buildGrandmasterTurnPrompt(aiPlayer)
+                }
+            ]
+        };
+    }
+
+    createGrandmasterSystemPrompt() {
+        return '你是一名以缜密读秒著称的顶级五子棋大师 AI 教练。收到局面后，你会逐行解析 15×15 棋盘：\"B\" 代表黑子、\"W\" 代表白子、\".\" 代表空点，坐标以 (x, y) 表示行列索引均从 0 开始。请精准复盘双方厚势、威胁与空位，严禁凭空捏造或忽略已有棋。系统会提供“合法落子候选”列表，你必须且只能从该列表中挑选空位。分析流程：① 识别并评估对手最危险的威胁；② 识别己方最具进攻价值的机会；③ 在候选列表中选出兼顾攻守的着法。务必确保返回坐标为空位。analysis 字段需同时说明攻与守的理由，banter 字段可幽默自嘲，其余内容保持专业。最终仅输出 JSON，包含 move、analysis、banter 三个字段，禁止追加其他文本。';
+    }
+
+    buildGrandmasterTurnPrompt(aiPlayer) {
+        const aiName = aiPlayer === 'black' ? '黑棋' : '白棋';
+        const opponent = this.getOpponent(aiPlayer) === 'black' ? '黑棋' : '白棋';
+        const perspective = this.humanPlayer === aiPlayer ? '玩家' : 'AI';
+        const boardDiagram = this.formatBoardForPrompt();
+        const recentMoves = this.formatRecentMovesForPrompt();
+        const remainingSpaces = this.boardSize * this.boardSize - this.moveHistory.length;
+
+        const threatSummary = this.formatThreatSummaryForPrompt();
+        const legalMovesText = this.formatLegalMovesForPrompt();
+
+        const sections = [
+            `轮到 ${aiName} 行棋，对手是 ${opponent}。`,
+            `当前身份：${perspective} 控制 ${aiName}。`,
+            `剩余空位：${remainingSpaces}。`,
+            '棋盘布局：',
+            boardDiagram,
+            '最近落子：',
+            recentMoves,
+            '威胁雷达：',
+            threatSummary,
+            '合法落子候选（仅可从中选择一处）：',
+            legalMovesText,
+            '请给出能够兼顾主动进攻与防守要点的最佳落子，优先考虑活四、双三、冲四等关键节奏。'
+        ];
+
+        sections.push('输出要求：{"move":{"x":行索引0-14,"y":列索引0-14},"analysis":"攻:xx; 守:xx","banter":"8到16字，幽默自嘲自己是大师AI"}');
+        sections.push('analysis 字段中的 "攻" 与 "守" 各不超过 16 字，需明确攻守要点。若候选列表没有理想位置，也必须从中选取最优项并说明权衡。请严格依据上方棋盘与历史落子判断，不得假设棋子位置。分析后再给出落子。');
+
+        return sections.join('\n\n');
+    }
+
+    formatBoardForPrompt() {
+        const header = Array.from({ length: this.boardSize })
+            .map((_, index) => index.toString().padStart(2, ' '))
+            .join(' ');
+        const lines = [`   ${header}`];
+
+        for (let i = 0; i < this.boardSize; i++) {
+            const rowCells = [];
+            for (let j = 0; j < this.boardSize; j++) {
+                const cell = this.board[i][j];
+                if (cell === 'black') {
+                    rowCells.push('B');
+                } else if (cell === 'white') {
+                    rowCells.push('W');
+                } else {
+                    rowCells.push('.');
+                }
+            }
+            lines.push(`${i.toString().padStart(2, ' ')} ${rowCells.map((symbol) => symbol.padStart(2, ' ')).join(' ')}`);
+        }
+
+        return lines.join('\n');
+    }
+
+    formatRecentMovesForPrompt(limit = 6) {
+        if (!Array.isArray(this.moveHistory) || this.moveHistory.length === 0) {
+            return '暂无历史记录，当前为开局阶段。';
+        }
+
+        const start = Math.max(0, this.moveHistory.length - limit);
+        const slices = this.moveHistory.slice(start);
+        return slices
+            .map((move, index) => {
+                const moveNumber = start + index + 1;
+                const color = move.player === 'black' ? '黑' : '白';
+                return `${moveNumber}. ${color} (${move.x}, ${move.y})`;
+            })
+            .join('\n');
+    }
+
+    formatLegalMovesForPrompt(limit) {
+        const maxLimit = typeof limit === 'number' ? limit : this.boardSize * this.boardSize;
+        const seen = new Set();
+        const results = [];
+        this.grandmasterLegalMoves = new Set();
+
+        const pushMove = (x, y) => {
+            const key = `${x},${y}`;
+            if (seen.has(key)) {
+                return;
+            }
+            if (this.board[x][y] !== null) {
+                return;
+            }
+            seen.add(key);
+            results.push({ x, y });
+            this.grandmasterLegalMoves.add(key);
+        };
+
+        const coreCandidates = this.getCandidateMoves(2);
+        for (const move of coreCandidates) {
+            pushMove(move.x, move.y);
+            if (results.length >= maxLimit) {
+                break;
+            }
+        }
+
+        if (results.length < maxLimit) {
+            const expanded = this.getCandidateMoves(3);
+            for (const move of expanded) {
+                pushMove(move.x, move.y);
+                if (results.length >= maxLimit) {
+                    break;
+                }
+            }
+        }
+
+        if (results.length < Math.min(maxLimit, 12)) {
+            const center = Math.floor(this.boardSize / 2);
+            pushMove(center, center);
+            const neighborOffsets = [
+                [0, 1], [1, 0], [0, -1], [-1, 0],
+                [1, 1], [1, -1], [-1, 1], [-1, -1]
+            ];
+            for (const [dx, dy] of neighborOffsets) {
+                const nx = center + dx;
+                const ny = center + dy;
+                if (this.isInsideBoard(nx, ny)) {
+                    pushMove(nx, ny);
+                }
+                if (results.length >= maxLimit) {
+                    break;
+                }
+            }
+        }
+
+        if (results.length < maxLimit) {
+            for (let i = 0; i < this.boardSize; i++) {
+                for (let j = 0; j < this.boardSize; j++) {
+                    if (this.board[i][j] === null) {
+                        pushMove(i, j);
+                        if (results.length >= maxLimit) {
+                            break;
+                        }
+                    }
+                }
+                if (results.length >= maxLimit) {
+                    break;
+                }
+            }
+        }
+
+        if (results.length === 0) {
+            return '无可落子点。';
+        }
+
+        const lines = [];
+        const chunkSize = 10;
+        for (let i = 0; i < results.length; i += chunkSize) {
+            const chunk = results
+                .slice(i, i + chunkSize)
+                .map(({ x, y }) => `(${x}, ${y})`)
+                .join('、');
+            lines.push(chunk);
+        }
+
+        return lines.join('\n');
+    }
+
+    formatThreatSummaryForPrompt() {
+        const players = ['black', 'white'];
+        const labels = {
+            black: '黑棋',
+            white: '白棋'
+        };
+        const lines = [];
+
+        for (const player of players) {
+            const summary = this.scanThreatsOnBoard(player);
+            const parts = [];
+
+            if (summary.openFours.length > 0) {
+                const points = this.formatThreatOpenCells(summary.openFours, 3);
+                parts.push(`活四 ${summary.openFours.length} 组→${points}`);
+            }
+            if (summary.semiOpenFours.length > 0) {
+                const points = this.formatThreatOpenCells(summary.semiOpenFours, 3);
+                parts.push(`冲四 ${summary.semiOpenFours.length} 组→${points}`);
+            }
+            if (summary.openThrees.length > 0) {
+                const points = this.formatThreatOpenCells(summary.openThrees, 3);
+                parts.push(`活三 ${summary.openThrees.length} 组→${points}`);
+            }
+            if (summary.semiOpenThrees.length > 0) {
+                const points = this.formatThreatOpenCells(summary.semiOpenThrees, 3);
+                parts.push(`眠三 ${summary.semiOpenThrees.length} 组→${points}`);
+            }
+
+            if (parts.length === 0) {
+                parts.push('暂无显著威胁');
+            }
+
+            lines.push(`${labels[player]}：${parts.join('；')}`);
+        }
+
+        return lines.join('\n');
+    }
+
+    formatThreatOpenCells(threats, limit = 3) {
+        const cells = [];
+        const seen = new Set();
+
+        for (const threat of threats) {
+            if (!Array.isArray(threat.openCells)) {
+                continue;
+            }
+            for (const cell of threat.openCells) {
+                const key = `${cell.x},${cell.y}`;
+                if (seen.has(key)) {
+                    continue;
+                }
+                seen.add(key);
+                cells.push(`(${cell.x}, ${cell.y})`);
+                if (cells.length >= limit) {
+                    return cells.join('、');
+                }
+            }
+        }
+
+        return cells.length > 0 ? cells.join('、') : '关键点待补';
+    }
+
+    scanThreatsOnBoard(player) {
+        const directions = [
+            [1, 0],
+            [0, 1],
+            [1, 1],
+            [1, -1]
+        ];
+
+        const summary = {
+            openFours: [],
+            semiOpenFours: [],
+            openThrees: [],
+            semiOpenThrees: []
+        };
+
+        for (let x = 0; x < this.boardSize; x++) {
+            for (let y = 0; y < this.boardSize; y++) {
+                if (this.board[x][y] !== player) {
+                    continue;
+                }
+
+                for (const [dx, dy] of directions) {
+                    const prevX = x - dx;
+                    const prevY = y - dy;
+                    if (this.isInsideBoard(prevX, prevY) && this.board[prevX][prevY] === player) {
+                        continue;
+                    }
+
+                    const line = this.collectLineFromOrigin(x, y, dx, dy, player);
+                    if (!line) {
+                        continue;
+                    }
+
+                    const { length, openEnds, openCells } = line;
+
+                    if (length === 4) {
+                        if (openEnds === 2) {
+                            summary.openFours.push(line);
+                        } else if (openEnds === 1) {
+                            summary.semiOpenFours.push(line);
+                        }
+                    } else if (length === 3) {
+                        if (openEnds === 2) {
+                            summary.openThrees.push(line);
+                        } else if (openEnds === 1) {
+                            summary.semiOpenThrees.push(line);
+                        }
+                    }
+                }
+            }
+        }
+
+        return summary;
+    }
+
+    collectLineFromOrigin(x, y, dx, dy, player) {
+        let length = 0;
+        const stones = [];
+        let cx = x;
+        let cy = y;
+
+        while (this.isInsideBoard(cx, cy) && this.board[cx][cy] === player) {
+            stones.push({ x: cx, y: cy });
+            length++;
+            cx += dx;
+            cy += dy;
+        }
+
+        let openEnds = 0;
+        const openCells = [];
+
+        if (this.isInsideBoard(cx, cy) && this.board[cx][cy] === null) {
+            openEnds++;
+            openCells.push({ x: cx, y: cy });
+        }
+
+        const backX = x - dx;
+        const backY = y - dy;
+        if (this.isInsideBoard(backX, backY) && this.board[backX][backY] === null) {
+            openEnds++;
+            openCells.push({ x: backX, y: backY });
+        }
+
+        return {
+            length,
+            openEnds,
+            stones,
+            openCells
+        };
+    }
+
+    parseLlmMove(rawContent) {
+        if (!rawContent || typeof rawContent !== 'string') {
+            return null;
+        }
+
+        const trimmed = rawContent.trim();
+        const firstBrace = trimmed.indexOf('{');
+        const lastBrace = trimmed.lastIndexOf('}');
+        if (firstBrace === -1 || lastBrace === -1 || lastBrace <= firstBrace) {
+            return null;
+        }
+
+        const jsonText = trimmed.slice(firstBrace, lastBrace + 1);
+        try {
+            const parsed = JSON.parse(jsonText);
+            const moveNode = parsed.move || parsed;
+            if (!moveNode) {
+                return null;
+            }
+
+            const rawX = moveNode.x ?? moveNode.row;
+            const rawY = moveNode.y ?? moveNode.col;
+
+            const x = Number(rawX);
+            const y = Number(rawY);
+
+            if (Number.isInteger(x) && Number.isInteger(y) && this.isInsideBoard(x, y)) {
+                const key = `${x},${y}`;
+                if (this.grandmasterLegalMoves instanceof Set && this.grandmasterLegalMoves.size > 0 && !this.grandmasterLegalMoves.has(key)) {
+                    return null;
+                }
+                const banter = typeof parsed.banter === 'string' ? parsed.banter.trim() : '';
+                const analysis = typeof parsed.analysis === 'string' ? parsed.analysis.trim() : '';
+                return { x, y, banter, analysis };
+            }
+        } catch (error) {
+            console.error('Failed to parse LLM move:', error);
+        }
+
+        return null;
+    }
+
+    isCellAvailable(x, y) {
+        return this.isInsideBoard(x, y) && this.board[x][y] === null;
+    }
+
+    normalizeLlmEndpoint(endpoint) {
+        if (!endpoint || typeof endpoint !== 'string') {
+            return '';
+        }
+
+        const trimmed = endpoint.trim();
+        if (!trimmed) {
+            return '';
+        }
+
+        const withoutSlash = trimmed.replace(/\/$/, '');
+        const lower = withoutSlash.toLowerCase();
+
+        if (lower.endsWith('/chat/completions') || lower.endsWith('/completions')) {
+            return withoutSlash;
+        }
+
+        return `${withoutSlash}/chat/completions`;
+    }
+
+    extractLlmMessageContent(payload) {
+        if (!payload) {
+            return '';
+        }
+
+        if (Array.isArray(payload.choices) && payload.choices.length > 0) {
+            const first = payload.choices[0];
+            if (first && first.message && typeof first.message.content === 'string') {
+                return first.message.content;
+            }
+            if (typeof first.text === 'string') {
+                return first.text;
+            }
+        }
+
+        if (typeof payload.output === 'string') {
+            return payload.output;
+        }
+
+        return '';
+    }
+
+    showInfoMessage(text) {
+        if (typeof text !== 'string' || text.length === 0) {
+            return;
+        }
+        if (this.gameOver) {
+            return;
+        }
+        const message = document.getElementById('message');
+        if (message) {
+            message.textContent = text;
+        }
+        this.messageState = 'info';
+    }
+
+    displayGrandmasterBanter(banter, analysis = '') {
+        if (typeof banter !== 'string' || banter.length === 0) {
+            return;
+        }
+        if (this.gameOver) {
+            return;
+        }
+        const message = document.getElementById('message');
+        if (!message) {
+            return;
+        }
+        const trimmedAnalysis = typeof analysis === 'string' ? analysis.trim() : '';
+        message.textContent = trimmedAnalysis ? `${banter}\n${trimmedAnalysis}` : banter;
+        this.messageState = 'banter';
+    }
+
+    updateLlmTestButtonState() {
+        const testButton = document.getElementById('llm-test');
+        if (!testButton) {
+            return;
+        }
+        const isGrandmasterActive = this.gameMode === 'pve' && this.difficulty === 'grandmaster';
+        if (!isGrandmasterActive) {
+            testButton.disabled = true;
+            return;
+        }
+
+        const { endpoint, apiKey, model } = this.llmConfig;
+        const ready = Boolean(endpoint && apiKey && model);
+        const busy = this.llmTestInFlight || this.llmRequestInFlight;
+        testButton.disabled = !ready || busy;
+    }
+
+    async testLlmConnection() {
+        if (this.llmTestInFlight) {
+            this.showInfoMessage('测试进行中，请稍候…');
+            return;
+        }
+
+        if (this.llmRequestInFlight) {
+            window.alert('AI 正在等待大模型响应，请稍后测试。');
+            return;
+        }
+
+        if (this.messageState === 'thinking') {
+            window.alert('AI 正在思考当前回合，稍后再试。');
+            return;
+        }
+
+        const { endpoint, apiKey, model } = this.llmConfig;
+        if (!endpoint || !apiKey || !model) {
+            this.showInfoMessage('请先填写完整的端点、密钥与模型名称。');
+            return;
+        }
+
+        const requestUrl = this.normalizeLlmEndpoint(endpoint);
+        if (!requestUrl) {
+            this.showInfoMessage('无法识别的大模型端点，请检查格式。');
+            return;
+        }
+
+        this.llmTestInFlight = true;
+        this.updateLlmTestButtonState();
+        this.showInfoMessage('正在测试大模型连通性…');
+
+        const payload = {
+            model,
+            temperature: 0.1,
+            max_tokens: 32,
+            messages: [
+                {
+                    role: 'system',
+                    content: '你是一位连通性检测助手，请直接返回 {"status":"ok"}。'
+                },
+                {
+                    role: 'user',
+                    content: '仅用于测试，请直接返回 {"status":"ok"}，不要附加其他内容。'
+                }
+            ]
+        };
+
+        try {
+            const response = await fetch(requestUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${apiKey}`
+                },
+                body: JSON.stringify(payload)
+            });
+
+            if (!response.ok) {
+                throw new Error(`LLM test failed with status ${response.status}`);
+            }
+
+            const data = await response.json();
+            const content = (this.extractLlmMessageContent(data) || '').trim();
+            if (/"status"\s*:\s*"ok"/i.test(content)) {
+                this.showInfoMessage('大模型连接正常，可开始对局。');
+            } else if (content.length > 0) {
+                this.showInfoMessage('已收到响应，请确认模型输出格式。');
+            } else {
+                this.showInfoMessage('收到空响应，请检查模型配置。');
+            }
+        } catch (error) {
+            console.error('LLM connectivity test failed:', error);
+            this.showInfoMessage('测试失败，请核对端点、密钥或网络。');
+        } finally {
+            this.llmTestInFlight = false;
+            this.updateLlmTestButtonState();
+        }
+    }
+
+    showAiThinkingMessage() {
+        if (this.gameOver) {
+            return;
+        }
+        const message = document.getElementById('message');
+        if (!message) {
+            return;
+        }
+        let text = 'AI 正在思考…';
+        if (this.difficulty === 'grandmaster') {
+            text = '大师AI 正在推演下一手…';
+        } else if (this.difficulty === 'hard') {
+            text = 'AI 正在精算后续变化…';
+        }
+        message.textContent = text;
+        this.messageState = 'thinking';
+    }
+
+    clearMessage() {
+        const message = document.getElementById('message');
+        if (message) {
+            message.textContent = '';
+        }
+        this.messageState = 'idle';
+    }
+
+    restoreLlmConfig() {
+        if (typeof window === 'undefined' || !window.localStorage) {
+            return;
+        }
+
+        try {
+            const raw = window.localStorage.getItem('gomoku.llmConfig');
+            if (!raw) {
+                return;
+            }
+            const parsed = JSON.parse(raw);
+            this.llmConfig = {
+                endpoint: typeof parsed.endpoint === 'string' ? parsed.endpoint : '',
+                apiKey: typeof parsed.apiKey === 'string' ? parsed.apiKey : '',
+                model: typeof parsed.model === 'string' ? parsed.model : ''
+            };
+        } catch (error) {
+            console.error('Failed to restore LLM config:', error);
+            this.llmConfig = {
+                endpoint: '',
+                apiKey: '',
+                model: ''
+            };
+        }
+    }
+
+    persistLlmConfig() {
+        if (typeof window === 'undefined' || !window.localStorage) {
+            return;
+        }
+
+        try {
+            window.localStorage.setItem('gomoku.llmConfig', JSON.stringify(this.llmConfig));
+        } catch (error) {
+            console.error('Failed to persist LLM config:', error);
+        }
     }
 
     isInsideBoard(x, y) {

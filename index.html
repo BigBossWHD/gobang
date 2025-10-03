@@ -19,20 +19,43 @@
                             <option value="pve" selected>人机对战</option>
                         </select>
                     </div>
-                    <div class="settings-group" id="difficulty-group">
-                        <label>难度:</label>
-                        <select id="difficulty">
-                            <option value="easy">简单</option>
-                            <option value="medium">中等</option>
-                            <option value="hard" selected>困难</option>
-                        </select>
+                    <div class="settings-row">
+                        <div class="settings-group settings-field" id="player-role-group">
+                            <label>执棋顺序:</label>
+                            <select id="player-role">
+                                <option value="first" selected>玩家先手</option>
+                                <option value="second">玩家后手</option>
+                            </select>
+                        </div>
+                        <div class="settings-group settings-field" id="difficulty-group">
+                            <label>难度:</label>
+                            <select id="difficulty">
+                                <option value="easy">简单</option>
+                                <option value="medium">中等</option>
+                                <option value="hard" selected>困难</option>
+                                <option value="grandmaster">大模型</option>
+                            </select>
+                        </div>
                     </div>
-                    <div class="settings-group" id="player-role-group">
-                        <label>执棋顺序:</label>
-                        <select id="player-role">
-                            <option value="first" selected>玩家先手</option>
-                            <option value="second">玩家后手</option>
-                        </select>
+                    <div class="settings-group hidden" id="llm-config-group">
+                        <label>大模型设置:</label>
+                        <div class="llm-config-inputs">
+                            <div class="llm-config-field">
+                                <label for="llm-endpoint">端点地址</label>
+                                <input id="llm-endpoint" type="text" placeholder="例如 https://api.deepseek.com/v1">
+                            </div>
+                            <div class="llm-config-field">
+                                <label for="llm-api-key">API 密钥</label>
+                                <input id="llm-api-key" type="password" placeholder="请输入密钥">
+                            </div>
+                            <div class="llm-config-field">
+                                <label for="llm-model">模型名称</label>
+                                <input id="llm-model" type="text" placeholder="例如 deepseek-chat">
+                            </div>
+                            <div class="llm-config-actions">
+                                <button id="llm-test" type="button" class="llm-test-button">测试连通性</button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </aside>
