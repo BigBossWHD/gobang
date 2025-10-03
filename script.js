@@ -1768,9 +1768,9 @@ class GomokuGame {
     buildGrandmasterRequestPayload(aiPlayer) {
         return {
             model: this.llmConfig.model,
-            temperature: 0.35,
-            top_p: 0.9,
-            max_tokens: 512,
+            temperature: 0.2,
+            top_p: 0.7,
+            max_tokens: 256,
             stream: false,
             response_format: { type: 'json_object' },
             messages: [
@@ -1799,7 +1799,7 @@ class GomokuGame {
 • 攻守筹划：为候选点筛选至少一处主攻方案与一处补防方案，必要时提出备选与风险提示。
 • 方案验证：确认所选坐标在候选列表中，同时再次校验该点确为空位且不会违反禁手（若有提示）。
 
-输出要求：仅输出 JSON，对象需包含 move、analysis、banter 三个字段，禁止出现额外文本或解释。analysis 字段需采用 "攻:...; 守:..." 格式，同时给出攻守理由（各不超过 16 字）。banter 字段保持 8-16 字的轻松自嘲语气，但不得降低专业判断。若模型默认生成 reasoning，请将 reasoning 置空，把全部说明写入 JSON 字段。`;
+输出要求：仅输出 JSON，对象需包含 move、analysis、banter 三个字段，禁止出现额外文本或解释。analysis 字段需采用 "攻:...; 守:..." 格式，同时给出攻守理由（各不超过 16 字）。banter 字段保持 8-16 字的轻松自嘲语气，但不得降低专业判断。若模型默认生成 reasoning，请令 reasoning 为空字符串，把全部说明写入 JSON 字段，并确保整条回复以 { 开头、以 } 结束，不出现任何前后缀。`;
     }
 
     buildGrandmasterTurnPrompt(aiPlayer) {
@@ -1830,7 +1830,7 @@ class GomokuGame {
 
         sections.push('分析步骤提示：① 快速枚举对手本回合及下一回合的必杀威胁；② 评估己方在候选点中形成主动攻势的线路；③ 综合短期安全与长线布局后再定夺。若存在临界威胁，先说明如何处置。');
         sections.push('输出要求：{"move":{"x":行索引0-14,"y":列索引0-14},"analysis":"攻:xx; 守:xx","banter":"8到16字，幽默自嘲自己是大师AI"}');
-        sections.push('analysis 字段中的 "攻" 与 "守" 各不超过 16 字，需明确攻守要点，也要注明若有备选或残留风险。若候选列表没有完美落点，亦必须从中选取最优项并说明取舍依据。请严格依据上方棋盘与历史落子判断，不得假设棋子位置。分析后再给出落子。');
+        sections.push('analysis 字段中的 "攻" 与 "守" 各不超过 16 字，需明确攻守要点，也要注明若有备选或残留风险。若候选列表没有完美落点，亦必须从中选取最优项并说明取舍依据。请严格依据上方棋盘与历史落子判断，不得假设棋子位置。请直接以 { 开头输出 JSON，回复中不得出现额外说明、前言或 reasoning 文字。');
 
         return sections.join('\n\n');
     }
