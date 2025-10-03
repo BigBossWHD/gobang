@@ -1715,8 +1715,9 @@ class GomokuGame {
         }
 
         const { endpoint, apiKey, model } = this.llmConfig;
-        if (!endpoint || !apiKey || !model) {
-            this.showInfoMessage('请填写完整的大模型端点、API 密钥和模型名称。');
+        const requiresApiKey = this.shouldRequireApiKey(endpoint);
+        if (!endpoint || !model || (requiresApiKey && !apiKey)) {
+            this.showInfoMessage('请填写完整的大模型端点、模型名称和必要的访问密钥。');
             return this.getHardMove(aiPlayer);
         }
 
@@ -1733,12 +1734,15 @@ class GomokuGame {
         this.updateLlmTestButtonState();
 
         try {
+            const headers = {
+                'Content-Type': 'application/json'
+            };
+            if (apiKey) {
+                headers['Authorization'] = `Bearer ${apiKey}`;
+            }
             const response = await fetch(requestUrl, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${apiKey}`
-                },
+                headers,
                 body: JSON.stringify(payload)
             });
 
@@ -1777,6 +1781,7 @@ class GomokuGame {
             temperature: 0.35,
             top_p: 0.9,
             max_tokens: 320,
+            stream: false,
             messages: [
                 {
                     role: 'system',
@@ -2188,6 +2193,33 @@ class GomokuGame {
         return `${withoutSlash}/chat/completions`;
     }
 
+    shouldRequireApiKey(endpoint) {
+        if (!endpoint || typeof endpoint !== 'string') {
+            return true;
+        }
+
+        try {
+            const provisional = endpoint.includes('://') ? endpoint : `https://${endpoint}`;
+            const url = new URL(provisional);
+            const host = url.hostname.toLowerCase();
+            if (host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0') {
+                return false;
+            }
+            if (host === '::1' || host === '[::1]') {
+                return false;
+            }
+            if (host.endsWith('.local')) {
+                return false;
+            }
+        } catch (error) {
+            if (/localhost|127\.0\.0\.1|::1/.test(endpoint)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     extractLlmMessageContent(payload) {
         if (!payload) {
             return '';
@@ -2252,7 +2284,8 @@ class GomokuGame {
         }
 
         const { endpoint, apiKey, model } = this.llmConfig;
-        const ready = Boolean(endpoint && apiKey && model);
+        const requiresApiKey = this.shouldRequireApiKey(endpoint);
+        const ready = Boolean(endpoint && model && (!requiresApiKey || apiKey));
         const busy = this.llmTestInFlight || this.llmRequestInFlight;
         testButton.disabled = !ready || busy;
     }
@@ -2274,8 +2307,9 @@ class GomokuGame {
         }
 
         const { endpoint, apiKey, model } = this.llmConfig;
-        if (!endpoint || !apiKey || !model) {
-            this.showInfoMessage('请先填写完整的端点、密钥与模型名称。');
+        const requiresApiKey = this.shouldRequireApiKey(endpoint);
+        if (!endpoint || !model || (requiresApiKey && !apiKey)) {
+            this.showInfoMessage('请先填写完整的端点、模型名称，以及必要时的访问密钥。');
             return;
         }
 
@@ -2293,6 +2327,7 @@ class GomokuGame {
             model,
             temperature: 0.1,
             max_tokens: 32,
+            stream: false,
             messages: [
                 {
                     role: 'system',
@@ -2306,12 +2341,15 @@ class GomokuGame {
         };
 
         try {
+            const headers = {
+                'Content-Type': 'application/json'
+            };
+            if (apiKey) {
+                headers['Authorization'] = `Bearer ${apiKey}`;
+            }
             const response = await fetch(requestUrl, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${apiKey}`
-                },
+                headers,
                 body: JSON.stringify(payload)
             });
 
