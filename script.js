@@ -1786,8 +1786,9 @@ class GomokuGame {
             model: this.llmConfig.model,
             temperature: 0.35,
             top_p: 0.9,
-            max_tokens: 320,
+            max_tokens: 512,
             stream: false,
+            response_format: { type: 'json_object' },
             messages: [
                 {
                     role: 'system',
@@ -1814,7 +1815,7 @@ class GomokuGame {
 • 攻守筹划：为候选点筛选至少一处主攻方案与一处补防方案，必要时提出备选与风险提示。
 • 方案验证：确认所选坐标在候选列表中，同时再次校验该点确为空位且不会违反禁手（若有提示）。
 
-输出要求：仅输出 JSON，对象需包含 move、analysis、banter 三个字段，禁止出现额外文本或解释。analysis 字段需采用 "攻:...; 守:..." 格式，同时给出攻守理由（各不超过 16 字）。banter 字段保持 8-16 字的轻松自嘲语气，但不得降低专业判断。`;
+输出要求：仅输出 JSON，对象需包含 move、analysis、banter 三个字段，禁止出现额外文本或解释。analysis 字段需采用 "攻:...; 守:..." 格式，同时给出攻守理由（各不超过 16 字）。banter 字段保持 8-16 字的轻松自嘲语气，但不得降低专业判断。若模型默认生成 reasoning，请将 reasoning 置空，把全部说明写入 JSON 字段。`;
     }
 
     buildGrandmasterTurnPrompt(aiPlayer) {
@@ -2420,8 +2421,9 @@ class GomokuGame {
         const payload = {
             model,
             temperature: 0.1,
-            max_tokens: 32,
+            max_tokens: 128,
             stream: false,
+            response_format: { type: 'json_object' },
             messages: [
                 {
                     role: 'system',
