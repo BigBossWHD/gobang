@@ -20,7 +20,8 @@ class GomokuGame {
         this.llmConfig = {
             endpoint: '',
             apiKey: '',
-            model: ''
+            model: '',
+            useReasoningFallback: true
         };
         this.llmRequestInFlight = false;
         this.llmTestInFlight = false;
@@ -359,6 +360,7 @@ class GomokuGame {
         const llmApiKeyInput = document.getElementById('llm-api-key');
         const llmModelInput = document.getElementById('llm-model');
         const llmTestButton = document.getElementById('llm-test');
+        const llmReasoningFallbackInput = document.getElementById('llm-reasoning-fallback');
 
         gameModeSelect.value = this.gameMode;
         difficultySelect.value = this.difficulty;
@@ -371,6 +373,9 @@ class GomokuGame {
         }
         if (llmModelInput) {
             llmModelInput.value = this.llmConfig.model;
+        }
+        if (llmReasoningFallbackInput) {
+            llmReasoningFallbackInput.checked = this.llmConfig.useReasoningFallback !== false;
         }
 
         gameModeSelect.addEventListener('change', (e) => {
@@ -434,6 +439,12 @@ class GomokuGame {
         if (llmModelInput) {
             llmModelInput.addEventListener('input', (event) => {
                 this.llmConfig.model = event.target.value.trim();
+                handleConfigChange();
+            });
+        }
+        if (llmReasoningFallbackInput) {
+            llmReasoningFallbackInput.addEventListener('change', (event) => {
+                this.llmConfig.useReasoningFallback = Boolean(event.target.checked);
                 handleConfigChange();
             });
         }
@@ -2647,7 +2658,24 @@ class GomokuGame {
         }
 
         const extractedContent = this.extractLlmMessageContent(data);
-        if (extractedContent) {
+        const hasDirectContent = Array.isArray(data?.choices)
+            && data.choices.some((choice) => {
+                const msg = choice?.message;
+                if (!msg) {
+                    return false;
+                }
+                if (typeof msg.content === 'string' && msg.content.trim().length > 0) {
+                    return true;
+                }
+                if (Array.isArray(msg.content)) {
+                    return msg.content.some((segment) => typeof segment === 'string' ? segment.trim().length > 0 : typeof segment?.text === 'string' && segment.text.trim().length > 0);
+                }
+                return false;
+            });
+
+        const shouldUseExtractedContent = extractedContent && (hasDirectContent || this.llmConfig.useReasoningFallback !== false);
+
+        if (shouldUseExtractedContent) {
             const parsed = this.parseLlmMove(extractedContent);
             if (parsed) {
                 return {
@@ -2688,20 +2716,22 @@ class GomokuGame {
             }
         }
 
-        const reasoningText = this.extractReasoningText(data);
-        if (reasoningText) {
-            const parsed = this.parseLlmMove(reasoningText);
-            if (parsed) {
-                return {
-                    move: { x: parsed.x, y: parsed.y },
-                    analysis: parsed.analysis,
-                    banter: parsed.banter
-                };
-            }
+        if (this.llmConfig.useReasoningFallback !== false) {
+            const reasoningText = this.extractReasoningText(data);
+            if (reasoningText) {
+                const parsed = this.parseLlmMove(reasoningText);
+                if (parsed) {
+                    return {
+                        move: { x: parsed.x, y: parsed.y },
+                        analysis: parsed.analysis,
+                        banter: parsed.banter
+                    };
+                }
 
-            const extractedFromText = this.extractMoveFromReasoningText(reasoningText);
-            if (extractedFromText) {
-                return extractedFromText;
+                const extractedFromText = this.extractMoveFromReasoningText(reasoningText);
+                if (extractedFromText) {
+                    return extractedFromText;
+                }
             }
         }
 
@@ -2756,6 +2786,10 @@ class GomokuGame {
 
     extractMoveFromReasoningText(text) {
         if (typeof text !== 'string' || text.length === 0) {
+            return null;
+        }
+
+        if (this.llmConfig.useReasoningFallback === false) {
             return null;
         }
 
@@ -2857,14 +2891,16 @@ class GomokuGame {
             this.llmConfig = {
                 endpoint: typeof parsed.endpoint === 'string' ? parsed.endpoint : '',
                 apiKey: typeof parsed.apiKey === 'string' ? parsed.apiKey : '',
-                model: typeof parsed.model === 'string' ? parsed.model : ''
+                model: typeof parsed.model === 'string' ? parsed.model : '',
+                useReasoningFallback: typeof parsed.useReasoningFallback === 'boolean' ? parsed.useReasoningFallback : true
             };
         } catch (error) {
             console.error('Failed to restore LLM config:', error);
             this.llmConfig = {
                 endpoint: '',
                 apiKey: '',
-                model: ''
+                model: '',
+                useReasoningFallback: true
             };
         }
     }

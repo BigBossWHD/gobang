@@ -176,6 +176,40 @@ body {
     margin-top: 6px;
 }
 
+.llm-config-toggle {
+    margin-top: 10px;
+    background: rgba(248, 250, 252, 0.9);
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    border-radius: 8px;
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.llm-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: #1f2937;
+    font-weight: 600;
+}
+
+.llm-toggle input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: #6366f1;
+    cursor: pointer;
+}
+
+.llm-toggle-hint {
+    margin: 0;
+    font-size: 12px;
+    color: #64748b;
+    line-height: 1.4;
+}
+
 .llm-test-button {
     padding: 6px 16px;
     border-radius: 999px;
