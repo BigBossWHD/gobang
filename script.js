@@ -1816,7 +1816,7 @@ class GomokuGame {
             model: this.llmConfig.model,
             temperature: 0.2,
             top_p: 0.7,
-            max_tokens: 1024,
+            max_tokens: 8192,
             stream: false,
             response_format: { type: 'json_object' },
             messages: [
@@ -1838,7 +1838,7 @@ class GomokuGame {
             model: this.llmConfig.model,
             temperature: 0.1,
             top_p: 0.5,
-            max_tokens: 512,
+            max_tokens: 8192,
             stream: false,
             messages: [
                 {
@@ -1892,7 +1892,7 @@ class GomokuGame {
             model: this.llmConfig.model,
             temperature: 0.1,
             top_p: 0.4,
-            max_tokens: 512,
+            max_tokens: 8192,
             stream: false,
             tools: [toolDescription],
             tool_choice: {
