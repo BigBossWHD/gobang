@@ -1734,28 +1734,12 @@ class GomokuGame {
         this.updateLlmTestButtonState();
 
         try {
-            const headers = {
-                'Content-Type': 'application/json'
-            };
-            if (apiKey) {
-                headers['Authorization'] = `Bearer ${apiKey}`;
-            }
-            const response = await fetch(requestUrl, {
-                method: 'POST',
-                headers,
-                body: JSON.stringify(payload)
-            });
-
-            if (!response.ok) {
-                throw new Error(`LLM request failed with status ${response.status}`);
-            }
-
-            const data = await response.json();
+            const { data, rawText } = await this.postChatCompletion(requestUrl, payload, apiKey);
             if (requestId !== this.activeLlmRequestId) {
                 return null;
             }
             const content = this.extractLlmMessageContent(data);
-            console.debug('Grandmaster LLM raw payload:', data);
+            console.debug('Grandmaster LLM raw payload:', rawText || data);
             console.debug('Grandmaster LLM extracted content:', content);
             const parsedMove = this.parseLlmMove(content);
             if (parsedMove && this.isCellAvailable(parsedMove.x, parsedMove.y)) {
@@ -2249,6 +2233,7 @@ class GomokuGame {
                                 ?? item.content
                                 ?? item.value
                                 ?? item.message
+                                ?? item.reasoning
                                 ?? item.data
                                 ?? item.function?.arguments
                             )
@@ -2267,6 +2252,7 @@ class GomokuGame {
                         ?? value.data.content
                         ?? value.data.value
                         ?? value.data.message
+                        ?? value.data.reasoning
                         ?? value.data.arguments
                     );
                     if (dataValue) {
@@ -2290,6 +2276,12 @@ class GomokuGame {
                 }
                 if (typeof value.message === 'string') {
                     return value.message;
+                }
+                if (typeof value.reasoning === 'string') {
+                    return value.reasoning;
+                }
+                if (Array.isArray(value.reasoning)) {
+                    return extractContent(value.reasoning);
                 }
                 if (value.function && typeof value.function.arguments === 'string') {
                     return value.function.arguments;
@@ -2437,25 +2429,9 @@ class GomokuGame {
         };
 
         try {
-            const headers = {
-                'Content-Type': 'application/json'
-            };
-            if (apiKey) {
-                headers['Authorization'] = `Bearer ${apiKey}`;
-            }
-            const response = await fetch(requestUrl, {
-                method: 'POST',
-                headers,
-                body: JSON.stringify(payload)
-            });
-
-            if (!response.ok) {
-                throw new Error(`LLM test failed with status ${response.status}`);
-            }
-
-            const data = await response.json();
+            const { data, rawText } = await this.postChatCompletion(requestUrl, payload, apiKey);
             const content = (this.extractLlmMessageContent(data) || '').trim();
-            console.debug('LLM test raw payload:', data);
+            console.debug('LLM test raw payload:', rawText || data);
             console.debug('LLM test extracted content:', content);
             if (/"status"\s*:\s*"ok"/i.test(content)) {
                 this.showInfoMessage('大模型连接正常，可开始对局。');
@@ -2471,6 +2447,61 @@ class GomokuGame {
             this.llmTestInFlight = false;
             this.updateLlmTestButtonState();
         }
+    }
+
+    async postChatCompletion(requestUrl, payload, apiKey) {
+        const headers = {
+            'Content-Type': 'application/json'
+        };
+        if (apiKey) {
+            headers['Authorization'] = `Bearer ${apiKey}`;
+        }
+
+        const perform = async (body) => {
+            const response = await fetch(requestUrl, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify(body)
+            });
+            const rawText = await response.text();
+            let data = null;
+            if (rawText) {
+                try {
+                    data = JSON.parse(rawText);
+                } catch (error) {
+                    console.debug('LLM response is not valid JSON, raw text:', rawText);
+                }
+            }
+            return { response, rawText, data };
+        };
+
+        let attempt = await perform(payload);
+
+        const shouldRetryWithoutFormat = payload && payload.response_format && (!attempt.response.ok) && (
+            attempt.response.status === 400 || attempt.response.status === 404 || /response[_-]?format/i.test(attempt.rawText)
+        );
+
+        if (shouldRetryWithoutFormat) {
+            const fallbackPayload = { ...payload };
+            delete fallbackPayload.response_format;
+            attempt = await perform(fallbackPayload);
+        }
+
+        if (!attempt.response.ok) {
+            const error = new Error(`LLM request failed with status ${attempt.response.status}`);
+            error.status = attempt.response.status;
+            error.body = attempt.rawText;
+            throw error;
+        }
+
+        if (!attempt.data) {
+            const error = new Error('LLM 响应为空或不是有效 JSON');
+            error.status = attempt.response.status;
+            error.body = attempt.rawText;
+            throw error;
+        }
+
+        return attempt;
     }
 
     showAiThinkingMessage() {
