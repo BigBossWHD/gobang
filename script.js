@@ -27,6 +27,8 @@ class GomokuGame {
         this.masterSystemPrompt = this.createGrandmasterSystemPrompt();
         this.messageState = 'idle';
         this.grandmasterLegalMoves = new Set();
+        this.activeLlmRequestId = 0;
+        this.llmRequestSerial = 0;
 
         this.restoreLlmConfig();
         this.updatePlayerColors();
@@ -238,6 +240,7 @@ class GomokuGame {
     undoMove() {
         this.cancelScheduledAIMove();
         this.hideResultModal();
+        this.cancelOngoingLlmRequest();
 
         if (this.moveHistory.length === 0) {
             return; // 没有棋可悔
@@ -305,6 +308,7 @@ class GomokuGame {
     newGame() {
         this.hideResultModal();
         this.cancelScheduledAIMove();
+        this.cancelOngoingLlmRequest();
         this.initializeBoard();
         this.updatePlayerColors();
         this.currentPlayer = 'black';
@@ -566,6 +570,14 @@ class GomokuGame {
         if (this.aiTimeoutId) {
             clearTimeout(this.aiTimeoutId);
             this.aiTimeoutId = null;
+        }
+    }
+
+    cancelOngoingLlmRequest() {
+        if (this.llmRequestInFlight || this.activeLlmRequestId !== 0) {
+            this.llmRequestInFlight = false;
+            this.activeLlmRequestId = 0;
+            this.updateLlmTestButtonState();
         }
     }
 
@@ -1716,6 +1728,8 @@ class GomokuGame {
 
         const payload = this.buildGrandmasterRequestPayload(aiPlayer);
         this.llmRequestInFlight = true;
+        const requestId = ++this.llmRequestSerial;
+        this.activeLlmRequestId = requestId;
         this.updateLlmTestButtonState();
 
         try {
@@ -1733,6 +1747,9 @@ class GomokuGame {
             }
 
             const data = await response.json();
+            if (requestId !== this.activeLlmRequestId) {
+                return null;
+            }
             const content = this.extractLlmMessageContent(data);
             const parsedMove = this.parseLlmMove(content);
             if (parsedMove && this.isCellAvailable(parsedMove.x, parsedMove.y)) {
@@ -1744,8 +1761,11 @@ class GomokuGame {
             console.error('Grandmaster LLM move failed:', error);
             this.showInfoMessage('大模型调用失败，暂以困难难度应对。');
         } finally {
-            this.llmRequestInFlight = false;
-            this.updateLlmTestButtonState();
+            if (requestId === this.activeLlmRequestId) {
+                this.llmRequestInFlight = false;
+                this.activeLlmRequestId = 0;
+                this.updateLlmTestButtonState();
+            }
         }
 
         return this.getHardMove(aiPlayer);
