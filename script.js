@@ -789,6 +789,14 @@ class GomokuGame {
             return criticalDefense;
         }
 
+        const urgentThreatMoves = this.findUrgentThreatMoves(opponent, 7800, 3);
+        if (urgentThreatMoves.length > 0) {
+            const strategicDefense = this.selectStrategicDefenseMove(aiPlayer, urgentThreatMoves, 1);
+            if (strategicDefense) {
+                return strategicDefense;
+            }
+        }
+
         const forcingAttack = this.findForcingAttack(aiPlayer, 8800);
         if (forcingAttack) {
             return forcingAttack;
@@ -893,6 +901,14 @@ class GomokuGame {
             return criticalDefense;
         }
 
+        const urgentThreatMoves = this.findUrgentThreatMoves(opponent, 7600, 3);
+        if (urgentThreatMoves.length > 0) {
+            const strategicDefense = this.selectStrategicDefenseMove(aiPlayer, urgentThreatMoves, 2);
+            if (strategicDefense) {
+                return strategicDefense;
+            }
+        }
+
         const forcingAttack = this.findForcingAttack(aiPlayer, 8600);
         if (forcingAttack) {
             return forcingAttack;
@@ -954,6 +970,7 @@ class GomokuGame {
             const pressureScore = this.calculateOffensivePressure(offensiveStats);
             const chainPotential = this.calculateChainPotential(offensiveStats);
             const immediateAdvantage = this.evaluateBoardAdvantage(aiPlayer);
+            const counterRiskPenalty = this.evaluateCounterThreatRisk(aiPlayer, opponent);
             let lookaheadScore;
             if (immediateWin) {
                 this.board[x][y] = null;
@@ -975,7 +992,8 @@ class GomokuGame {
                 + forcingSeverity * 2.2
                 + pressureScore * 0.5
                 + chainPotential * 0.65
-                + immediateAdvantage * 0.45;
+                + immediateAdvantage * 0.45
+                + counterRiskPenalty;
 
             const randomizedScore = totalScore + Math.random() * 120;
 
@@ -1063,6 +1081,109 @@ class GomokuGame {
         }
 
         return null;
+    }
+
+    getImmediateWinningMoves(player, radius = 2) {
+        const candidates = this.getCandidateMoves(radius);
+        const winningMoves = [];
+
+        for (const { x, y } of candidates) {
+            if (this.board[x][y] !== null) continue;
+            this.board[x][y] = player;
+            const isWinningMove = this.checkWin(x, y);
+            this.board[x][y] = null;
+            if (isWinningMove) {
+                winningMoves.push({ x, y });
+            }
+        }
+
+        return winningMoves;
+    }
+
+    findUrgentThreatMoves(player, minSeverity = 7800, radius = 3) {
+        const candidates = this.getCandidateMoves(radius);
+        const threateningMoves = [];
+
+        for (const { x, y } of candidates) {
+            if (this.board[x][y] !== null) continue;
+
+            this.board[x][y] = player;
+            const isWinningMove = this.checkWin(x, y);
+            const lineStats = this.collectLineStats(x, y, player);
+            const profile = this.getThreatProfile(lineStats);
+            const forkBonus = this.calculateForkBonus(lineStats);
+            const pressure = this.calculateOffensivePressure(lineStats);
+            this.board[x][y] = null;
+
+            const severity = isWinningMove
+                ? 10000
+                : Math.max(this.evaluateOffenseSeverity(profile), forkBonus / 3, pressure / 2);
+
+            if (severity >= minSeverity) {
+                threateningMoves.push({ x, y, severity });
+            }
+        }
+
+        threateningMoves.sort((a, b) => b.severity - a.severity);
+        return threateningMoves;
+    }
+
+    selectStrategicDefenseMove(aiPlayer, threateningMoves, depth = 2) {
+        if (!threateningMoves || threateningMoves.length === 0) {
+            return null;
+        }
+
+        const opponent = this.getOpponent(aiPlayer);
+        let bestMove = null;
+        let bestScore = -Infinity;
+        const used = new Set();
+
+        for (const { x, y } of threateningMoves) {
+            if (this.board[x][y] !== null) continue;
+            const key = `${x},${y}`;
+            if (used.has(key)) continue;
+            used.add(key);
+
+            this.board[x][y] = aiPlayer;
+            const immediateWin = this.checkWin(x, y);
+            if (immediateWin) {
+                this.board[x][y] = null;
+                return { x, y };
+            }
+
+            const opponentWinningMoves = this.getImmediateWinningMoves(opponent, 2).length;
+            const remainingThreats = this.findUrgentThreatMoves(opponent, 7600, 3).length;
+            const initiative = this.findUrgentThreatMoves(aiPlayer, 8600, 3).length;
+            const boardAdvantage = this.evaluateBoardAdvantage(aiPlayer);
+            const lookahead = depth > 0
+                ? this.minimaxSearch(depth, -Infinity, Infinity, opponent, aiPlayer, depth)
+                : 0;
+            this.board[x][y] = null;
+
+            const score = boardAdvantage
+                + (Number.isFinite(lookahead) ? lookahead * 0.5 : 0)
+                - opponentWinningMoves * 120000
+                - remainingThreats * 9500
+                + initiative * 3200;
+
+            if (score > bestScore) {
+                bestScore = score;
+                bestMove = { x, y };
+            }
+        }
+
+        return bestMove;
+    }
+
+    evaluateCounterThreatRisk(aiPlayer, opponent) {
+        const opponentWinningMoves = this.getImmediateWinningMoves(opponent, 2).length;
+        if (opponentWinningMoves > 0) {
+            return -120000 - (opponentWinningMoves - 1) * 18000;
+        }
+
+        const severeThreats = this.findUrgentThreatMoves(opponent, 9000, 3).length;
+        const aiImmediateThreats = this.findUrgentThreatMoves(aiPlayer, 9000, 3).length;
+        return -severeThreats * 6000 + aiImmediateThreats * 1800;
     }
 
     getCandidateMoves(radius = 1) {
@@ -1783,6 +1904,21 @@ class GomokuGame {
                 if (extracted && extracted.move && Number.isInteger(extracted.move.x) && Number.isInteger(extracted.move.y)) {
                     const { x, y } = extracted.move;
                     if (this.isCellAvailable(x, y)) {
+                        const stabilizedMove = this.stabilizeGrandmasterMove(aiPlayer, { x, y });
+                        if (stabilizedMove) {
+                            const isReplaced = stabilizedMove.x !== x || stabilizedMove.y !== y;
+                            return {
+                                x: stabilizedMove.x,
+                                y: stabilizedMove.y,
+                                banter: isReplaced
+                                    ? '大师AI纠错保命成功'
+                                    : (typeof extracted.banter === 'string' ? extracted.banter : ''),
+                                analysis: isReplaced
+                                    ? '攻:稳住节奏反击; 守:先消除即杀点'
+                                    : (typeof extracted.analysis === 'string' ? extracted.analysis : '')
+                            };
+                        }
+
                         return {
                             x,
                             y,
@@ -1939,7 +2075,8 @@ class GomokuGame {
         const remainingSpaces = this.boardSize * this.boardSize - this.moveHistory.length;
 
         const threatSummary = this.formatThreatSummaryForPrompt();
-        const legalMovesText = this.formatLegalMovesForPrompt();
+        const legalMovesText = this.formatLegalMovesForPrompt(aiPlayer);
+        const strategicHints = this.formatStrategicHintsForPrompt(aiPlayer);
 
         const sections = [
             `轮到 ${aiName} 行棋，对手是 ${opponent}。`,
@@ -1951,6 +2088,8 @@ class GomokuGame {
             recentMoves,
             '威胁雷达：',
             threatSummary,
+            '本地战术建议（优先参考）：',
+            strategicHints,
             '合法落子候选（仅可从中选择一处）：',
             legalMovesText,
             '请给出能够兼顾主动进攻与防守要点的最佳落子，优先考虑活四、双三、冲四等关键节奏。'
@@ -2003,7 +2142,9 @@ class GomokuGame {
             .join('\n');
     }
 
-    formatLegalMovesForPrompt(limit) {
+    formatLegalMovesForPrompt(aiPlayer, limit) {
+        const player = aiPlayer || this.aiPlayer || this.currentPlayer || 'black';
+        const opponent = this.getOpponent(player);
         const maxLimit = typeof limit === 'number' ? limit : this.boardSize * this.boardSize;
         const seen = new Set();
         const results = [];
@@ -2021,6 +2162,72 @@ class GomokuGame {
             results.push({ x, y });
             this.grandmasterLegalMoves.add(key);
         };
+
+        // 优先加入本地判定的关键战术点，减少模型偏离主线的概率。
+        const aiWinningMoves = this.getImmediateWinningMoves(player, 2);
+        for (const move of aiWinningMoves) {
+            pushMove(move.x, move.y);
+            if (results.length >= maxLimit) {
+                break;
+            }
+        }
+
+        if (results.length < maxLimit) {
+            const blockWinningMoves = this.getImmediateWinningMoves(opponent, 2);
+            for (const move of blockWinningMoves) {
+                pushMove(move.x, move.y);
+                if (results.length >= maxLimit) {
+                    break;
+                }
+            }
+        }
+
+        if (results.length < maxLimit) {
+            const urgentDefense = this.findUrgentThreatMoves(opponent, 7600, 3);
+            for (const move of urgentDefense.slice(0, 8)) {
+                pushMove(move.x, move.y);
+                if (results.length >= maxLimit) {
+                    break;
+                }
+            }
+        }
+
+        if (results.length < maxLimit) {
+            const urgentAttack = this.findUrgentThreatMoves(player, 8400, 3);
+            for (const move of urgentAttack.slice(0, 8)) {
+                pushMove(move.x, move.y);
+                if (results.length >= maxLimit) {
+                    break;
+                }
+            }
+        }
+
+        if (results.length < maxLimit) {
+            const ranked = this.getCandidateMoves(2)
+                .map(({ x, y }) => ({
+                    x,
+                    y,
+                    score: this.evaluateAdvancedPositionForPlayer(x, y, player, {
+                        centerWeight: 52,
+                        offensiveMultiplier: 1.45,
+                        defensiveMultiplier: 0.58,
+                        adjacencyWeight: 78,
+                        adjacencyRadius: 2,
+                        threatWeight: 1.2,
+                        forkWeight: 1.1,
+                        defensiveThreatWeight: 0.72,
+                        defensiveForkWeight: 0.66
+                    })
+                }))
+                .sort((a, b) => b.score - a.score);
+
+            for (const move of ranked.slice(0, 16)) {
+                pushMove(move.x, move.y);
+                if (results.length >= maxLimit) {
+                    break;
+                }
+            }
+        }
 
         const coreCandidates = this.getCandidateMoves(2);
         for (const move of coreCandidates) {
@@ -2090,6 +2297,48 @@ class GomokuGame {
         }
 
         return lines.join('\n');
+    }
+
+    formatStrategicHintsForPrompt(aiPlayer) {
+        const player = aiPlayer || this.aiPlayer || this.currentPlayer || 'black';
+        const opponent = this.getOpponent(player);
+        const hints = [];
+
+        const winningMoves = this.getImmediateWinningMoves(player, 2);
+        if (winningMoves.length > 0) {
+            const text = winningMoves.slice(0, 3).map(({ x, y }) => `(${x}, ${y})`).join('、');
+            hints.push(`己方即杀点：${text}`);
+        }
+
+        const opponentWins = this.getImmediateWinningMoves(opponent, 2);
+        if (opponentWins.length > 0) {
+            const text = opponentWins.slice(0, 4).map(({ x, y }) => `(${x}, ${y})`).join('、');
+            hints.push(`必须防守点：${text}`);
+        }
+
+        const urgentDefense = this.findUrgentThreatMoves(opponent, 7600, 3);
+        if (urgentDefense.length > 0) {
+            const text = urgentDefense
+                .slice(0, 4)
+                .map(({ x, y, severity }) => `(${x}, ${y})@${Math.round(severity)}`)
+                .join('、');
+            hints.push(`对手高压点：${text}`);
+        }
+
+        const urgentAttack = this.findUrgentThreatMoves(player, 8400, 3);
+        if (urgentAttack.length > 0) {
+            const text = urgentAttack
+                .slice(0, 3)
+                .map(({ x, y, severity }) => `(${x}, ${y})@${Math.round(severity)}`)
+                .join('、');
+            hints.push(`己方先手点：${text}`);
+        }
+
+        if (hints.length === 0) {
+            hints.push('暂无绝对先手，优先兼顾中心与联络。');
+        }
+
+        return hints.join('\n');
     }
 
     formatThreatSummaryForPrompt() {
@@ -2306,6 +2555,90 @@ class GomokuGame {
 
     isCellAvailable(x, y) {
         return this.isInsideBoard(x, y) && this.board[x][y] === null;
+    }
+
+    evaluateGrandmasterCandidateScore(aiPlayer, x, y) {
+        if (!this.isInsideBoard(x, y) || this.board[x][y] !== null) {
+            return -Infinity;
+        }
+
+        const opponent = this.getOpponent(aiPlayer);
+        this.board[x][y] = aiPlayer;
+        const immediateWin = this.checkWin(x, y);
+        if (immediateWin) {
+            this.board[x][y] = null;
+            return 500000;
+        }
+
+        const baseScore = this.evaluateAdvancedPositionForPlayer(x, y, aiPlayer, {
+            centerWeight: 56,
+            offensiveMultiplier: 1.72,
+            defensiveMultiplier: 0.52,
+            adjacencyWeight: 94,
+            adjacencyRadius: 2,
+            threatWeight: 1.45,
+            forkWeight: 1.28,
+            defensiveThreatWeight: 0.7,
+            defensiveForkWeight: 0.62
+        });
+        const lineStats = this.collectLineStats(x, y, aiPlayer);
+        const profile = this.getThreatProfile(lineStats);
+        const forcingSeverity = this.evaluateOffenseSeverity(profile);
+        const forkBonus = this.calculateForkBonus(lineStats);
+        const pressureScore = this.calculateOffensivePressure(lineStats);
+        const chainPotential = this.calculateChainPotential(lineStats);
+        const boardAdvantage = this.evaluateBoardAdvantage(aiPlayer);
+        const lookahead = this.minimaxSearch(2, -Infinity, Infinity, opponent, aiPlayer, 2);
+        const riskPenalty = this.evaluateCounterThreatRisk(aiPlayer, opponent);
+        this.board[x][y] = null;
+
+        const lookaheadScore = Number.isFinite(lookahead) ? lookahead : 0;
+        return lookaheadScore * 0.55
+            + baseScore * 0.35
+            + forcingSeverity * 2.2
+            + forkBonus * 0.008
+            + pressureScore * 0.5
+            + chainPotential * 0.65
+            + boardAdvantage * 0.45
+            + riskPenalty;
+    }
+
+    stabilizeGrandmasterMove(aiPlayer, move) {
+        if (!move || !Number.isInteger(move.x) || !Number.isInteger(move.y)) {
+            return null;
+        }
+
+        const { x, y } = move;
+        if (!this.isGrandmasterCandidate(x, y)) {
+            return null;
+        }
+
+        const llmScore = this.evaluateGrandmasterCandidateScore(aiPlayer, x, y);
+        if (!Number.isFinite(llmScore)) {
+            return null;
+        }
+
+        const hardMove = this.getHardMove(aiPlayer);
+        if (!hardMove || !Number.isInteger(hardMove.x) || !Number.isInteger(hardMove.y)) {
+            return { x, y };
+        }
+
+        if (hardMove.x === x && hardMove.y === y) {
+            return { x, y };
+        }
+
+        const hardScore = this.evaluateGrandmasterCandidateScore(aiPlayer, hardMove.x, hardMove.y);
+        if (!Number.isFinite(hardScore)) {
+            return { x, y };
+        }
+
+        const unsafeThreshold = -90000;
+        const replacementMargin = 4200;
+        if (llmScore <= unsafeThreshold || hardScore > llmScore + replacementMargin) {
+            return { x: hardMove.x, y: hardMove.y };
+        }
+
+        return { x, y };
     }
 
     normalizeLlmEndpoint(endpoint) {
