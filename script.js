@@ -866,34 +866,27 @@ class GomokuGame {
         const opponent = this.getOpponent(aiPlayer);
         let bestScore = -Infinity;
         let bestMove = null;
-        const evaluatedMoves = [];
-        
-        // 检查是否有获胜的机会
-        for (let i = 0; i < this.boardSize; i++) {
-            for (let j = 0; j < this.boardSize; j++) {
-                if (this.board[i][j] === null) {
-                    this.board[i][j] = aiPlayer;
-                    if (this.checkWin(i, j)) {
-                        this.board[i][j] = null;
-                        return { x: i, y: j };
-                    }
-                    this.board[i][j] = null;
-                }
-            }
+
+        // 先处理己方即杀，避免错过直接终局。
+        const winningMoves = this.getImmediateWinningMoves(aiPlayer, 2);
+        if (winningMoves.length > 0) {
+            return this.selectMostPromisingMove(aiPlayer, winningMoves, 1) || winningMoves[0];
         }
-        
-        // 检查是否需要防守
-        for (let i = 0; i < this.boardSize; i++) {
-            for (let j = 0; j < this.boardSize; j++) {
-                if (this.board[i][j] === null) {
-                    this.board[i][j] = opponent;
-                    if (this.checkWin(i, j)) {
-                        this.board[i][j] = null;
-                        return { x: i, y: j };
-                    }
-                    this.board[i][j] = null;
-                }
+
+        // 对手有即杀点时，必须先解杀。
+        const opponentWinningMoves = this.getImmediateWinningMoves(opponent, 2);
+        if (opponentWinningMoves.length > 0) {
+            const forcedThreats = opponentWinningMoves.map(({ x, y }) => ({ x, y, severity: 10000 }));
+            const forcedDefense = this.selectStrategicDefenseMove(aiPlayer, forcedThreats, 2);
+            if (forcedDefense) {
+                return forcedDefense;
             }
+            return opponentWinningMoves[0];
+        }
+
+        const tacticalMove = this.findBestTacticalMove(aiPlayer, opponent, 2);
+        if (tacticalMove) {
+            return tacticalMove;
         }
 
         const criticalDefense = this.findCriticalDefenseMove(opponent, 5200);
@@ -911,7 +904,12 @@ class GomokuGame {
 
         const forcingAttack = this.findForcingAttack(aiPlayer, 8600);
         if (forcingAttack) {
-            return forcingAttack;
+            this.board[forcingAttack.x][forcingAttack.y] = aiPlayer;
+            const unsafeCounter = this.getImmediateWinningMoves(opponent, 2).length > 0;
+            this.board[forcingAttack.x][forcingAttack.y] = null;
+            if (!unsafeCounter) {
+                return forcingAttack;
+            }
         }
 
         // 使用更深的评分和浅层搜索
@@ -954,8 +952,9 @@ class GomokuGame {
             })
             .sort((a, b) => b.baseScore - a.baseScore);
 
-        const searchDepth = this.moveHistory.length < 12 ? 3 : 2;
-        const limit = Math.min(searchDepth === 3 ? 8 : 9, scoredCandidates.length);
+        const stonesPlayed = this.moveHistory.length;
+        const searchDepth = stonesPlayed < 8 ? 4 : (stonesPlayed < 24 ? 3 : 2);
+        const limit = Math.min(searchDepth >= 4 ? 6 : (searchDepth === 3 ? 8 : 10), scoredCandidates.length);
 
         for (let index = 0; index < limit; index++) {
             const { x, y, baseScore } = scoredCandidates[index];
@@ -971,13 +970,19 @@ class GomokuGame {
             const chainPotential = this.calculateChainPotential(offensiveStats);
             const immediateAdvantage = this.evaluateBoardAdvantage(aiPlayer);
             const counterRiskPenalty = this.evaluateCounterThreatRisk(aiPlayer, opponent);
-            let lookaheadScore;
+            let lookaheadScore = 0;
             if (immediateWin) {
                 this.board[x][y] = null;
                 return { x, y };
             }
 
-            if (forcingSeverity >= 8700 || forkBonus >= 20000 || pressureScore >= 9000 || chainPotential >= 9500) {
+            const opponentImmediateWins = this.getImmediateWinningMoves(opponent, 2).length;
+            if (opponentImmediateWins > 0) {
+                this.board[x][y] = null;
+                continue;
+            }
+
+            if (forcingSeverity >= 9400 || forkBonus >= 24000 || pressureScore >= 11000 || chainPotential >= 11000) {
                 this.board[x][y] = null;
                 return { x, y };
             }
@@ -995,28 +1000,10 @@ class GomokuGame {
                 + immediateAdvantage * 0.45
                 + counterRiskPenalty;
 
-            const randomizedScore = totalScore + Math.random() * 120;
-
             if (totalScore > bestScore) {
                 bestScore = totalScore;
                 bestMove = { x, y };
             }
-
-            evaluatedMoves.push({ x, y, score: randomizedScore });
-        }
-
-        if (evaluatedMoves.length === 0) {
-            return this.getMediumMove(aiPlayer);
-        }
-
-        const orderedMoves = evaluatedMoves.sort((a, b) => b.score - a.score);
-        const selection = this.selectRandomizedMove(orderedMoves, {
-            topN: Math.min(4, orderedMoves.length),
-            temperature: 0.6
-        });
-
-        if (selection) {
-            return { x: selection.x, y: selection.y };
         }
 
         if (bestMove) {
@@ -1184,6 +1171,83 @@ class GomokuGame {
         const severeThreats = this.findUrgentThreatMoves(opponent, 9000, 3).length;
         const aiImmediateThreats = this.findUrgentThreatMoves(aiPlayer, 9000, 3).length;
         return -severeThreats * 6000 + aiImmediateThreats * 1800;
+    }
+
+    selectMostPromisingMove(aiPlayer, moves, depth = 1) {
+        if (!Array.isArray(moves) || moves.length === 0) {
+            return null;
+        }
+
+        let bestMove = null;
+        let bestScore = -Infinity;
+
+        for (const { x, y } of moves) {
+            if (this.board[x][y] !== null) continue;
+
+            this.board[x][y] = aiPlayer;
+            const immediateWin = this.checkWin(x, y);
+            const opponent = this.getOpponent(aiPlayer);
+            const lookahead = depth > 0
+                ? this.minimaxSearch(depth, -Infinity, Infinity, opponent, aiPlayer, depth)
+                : 0;
+            const boardAdvantage = this.evaluateBoardAdvantage(aiPlayer);
+            this.board[x][y] = null;
+
+            const score = (immediateWin ? 300000 : 0)
+                + (Number.isFinite(lookahead) ? lookahead : 0)
+                + boardAdvantage * 0.4;
+
+            if (score > bestScore) {
+                bestScore = score;
+                bestMove = { x, y };
+            }
+        }
+
+        return bestMove;
+    }
+
+    findBestTacticalMove(aiPlayer, opponent, radius = 2) {
+        const candidates = this.getCandidateMoves(radius);
+        let bestMove = null;
+        let bestScore = -Infinity;
+
+        for (const { x, y } of candidates) {
+            if (this.board[x][y] !== null) continue;
+
+            this.board[x][y] = aiPlayer;
+            if (this.checkWin(x, y)) {
+                this.board[x][y] = null;
+                return { x, y };
+            }
+
+            const opponentWins = this.getImmediateWinningMoves(opponent, 2).length;
+            if (opponentWins > 0) {
+                this.board[x][y] = null;
+                continue;
+            }
+
+            const aiNextWins = this.getImmediateWinningMoves(aiPlayer, 2).length;
+            const aiThreats = this.findUrgentThreatMoves(aiPlayer, 8600, 3).length;
+            const opponentThreats = this.findUrgentThreatMoves(opponent, 7600, 3).length;
+            const boardAdvantage = this.evaluateBoardAdvantage(aiPlayer);
+            this.board[x][y] = null;
+
+            const score = aiNextWins * 92000
+                + aiThreats * 6200
+                + boardAdvantage
+                - opponentThreats * 7600;
+
+            if (score > bestScore) {
+                bestScore = score;
+                bestMove = { x, y };
+            }
+        }
+
+        if (bestScore >= 45000) {
+            return bestMove;
+        }
+
+        return null;
     }
 
     getCandidateMoves(radius = 1) {
