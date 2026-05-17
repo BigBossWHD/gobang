@@ -55,7 +55,7 @@ body {
     flex-direction: column;
     gap: 18px;
     position: relative;
-    overflow: hidden;
+    overflow: visible;
 }
 
 .side-panel::before {
@@ -67,6 +67,10 @@ body {
     height: 160px;
     background: radial-gradient(circle, rgba(102, 126, 234, 0.25), transparent 70%);
     pointer-events: none;
+}
+
+.side-panel-left {
+    overflow-y: auto;
 }
 
 .panel-title {
@@ -86,6 +90,7 @@ body {
     display: flex;
     flex-wrap: wrap;
     gap: 12px;
+    width: 100%;
 }
 
 .settings-field {
@@ -490,7 +495,12 @@ body {
 
     .settings-panel {
         flex-direction: row;
+        flex-wrap: wrap;
         gap: 18px;
+    }
+
+    #llm-config-group {
+        flex: 1 1 100%;
     }
 
     .settings-group {

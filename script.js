@@ -1962,9 +1962,6 @@ class GomokuGame {
                 }
 
                 const extracted = this.extractGrandmasterResponse(data);
-                console.debug('Grandmaster LLM raw payload:', rawText || data);
-                console.debug('Grandmaster LLM extracted content:', extracted);
-
                 if (extracted && extracted.move && Number.isInteger(extracted.move.x) && Number.isInteger(extracted.move.y)) {
                     const { x, y } = extracted.move;
                     if (this.isCellAvailable(x, y)) {
@@ -2970,10 +2967,8 @@ class GomokuGame {
         };
 
         try {
-            const { data, rawText } = await this.postChatCompletion(requestUrl, payload, apiKey);
+            const { data } = await this.postChatCompletion(requestUrl, payload, apiKey);
             const content = (this.extractLlmMessageContent(data) || '').trim();
-            console.debug('LLM test raw payload:', rawText || data);
-            console.debug('LLM test extracted content:', content);
             if (/"status"\s*:\s*"ok"/i.test(content)) {
                 this.showInfoMessage('大模型连接正常，可开始对局。');
             } else if (content.length > 0) {
@@ -3010,8 +3005,8 @@ class GomokuGame {
             if (rawText) {
                 try {
                     data = JSON.parse(rawText);
-                } catch (error) {
-                    console.debug('LLM response is not valid JSON, raw text:', rawText);
+                } catch {
+                    data = null;
                 }
                 if (!data && /"reasoning"\s*?:/.test(rawText)) {
                     data = { choices: [{ message: { reasoning: rawText } }] };
