@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>五子棋游戏</title>
-    <link rel="stylesheet" href="style.css?v=20260517">
+    <link rel="stylesheet" href="style.css?v=20260517-8">
 </head>
 <body>
     <div class="container">
@@ -42,7 +42,7 @@
                         <div class="llm-config-inputs">
                             <div class="llm-config-field">
                                 <label for="llm-endpoint">端点地址</label>
-                                <input id="llm-endpoint" type="text" placeholder="例如 https://api.deepseek.com/v1">
+                                <input id="llm-endpoint" type="text" value="https://api.deepseek.com/v1">
                             </div>
                             <div class="llm-config-field">
                                 <label for="llm-api-key">API 密钥</label>
@@ -50,18 +50,29 @@
                             </div>
                             <div class="llm-config-field">
                                 <label for="llm-model">模型名称</label>
-                                <input id="llm-model" type="text" placeholder="例如 deepseek-v4-pro">
+                                <input id="llm-model" type="text" value="deepseek-v4-flash">
+                            </div>
+                            <div class="llm-options-row">
+                                <label class="llm-toggle llm-inline-toggle">
+                                    <input id="llm-thinking-enabled" type="checkbox" checked>
+                                    <span>思考</span>
+                                </label>
+                                <label class="llm-compact-select">
+                                    <span>强度</span>
+                                    <select id="llm-reasoning-effort">
+                                        <option value="high" selected>High</option>
+                                        <option value="max">Max</option>
+                                    </select>
+                                </label>
+                                <label class="llm-toggle llm-inline-toggle">
+                                    <input id="llm-reasoning-fallback" type="checkbox" checked>
+                                    <span>推理兜底</span>
+                                </label>
                             </div>
                             <div class="llm-config-actions">
                                 <button id="llm-test" type="button" class="llm-test-button">测试连通性</button>
                             </div>
-                            <div class="llm-config-toggle">
-                                <label class="llm-toggle">
-                                    <input id="llm-reasoning-fallback" type="checkbox" checked>
-                                    <span>允许从推理内容识别落子</span>
-                                </label>
-                                <p class="llm-toggle-hint">关闭后仅接受 JSON 或函数调用结果</p>
-                            </div>
+                            <div class="llm-config-status" id="llm-config-status">待填写配置</div>
                         </div>
                     </div>
                 </div>
@@ -94,6 +105,9 @@
             </div>
         </div>
     </div>
-    <script src="script.js?v=20260517"></script>
+    <script src="script.js?v=20260517-8"></script>
+    <script src="ai.js?v=20260517-8"></script>
+    <script src="llm.js?v=20260517-8"></script>
+    <script src="app.js?v=20260517-8"></script>
 </body>
 </html>
