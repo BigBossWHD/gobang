@@ -56,6 +56,7 @@ Object.assign(GomokuGame.prototype, {
         if (this.gameOver || this.gameMode !== 'pve' || this.currentPlayer !== this.aiPlayer) return;
         
         const aiPlayer = this.aiPlayer;
+        const turnSerial = this.aiTurnSerial;
         let move;
         switch (this.difficulty) {
             case 'easy':
@@ -65,7 +66,7 @@ Object.assign(GomokuGame.prototype, {
                 move = this.getMediumMove(aiPlayer);
                 break;
             case 'hard':
-                move = this.getHardMove(aiPlayer);
+                move = await this.getHardMoveAsync(aiPlayer);
                 break;
             case 'grandmaster':
                 move = await this.getGrandmasterMove(aiPlayer);
@@ -74,7 +75,8 @@ Object.assign(GomokuGame.prototype, {
                 move = this.getMediumMove(aiPlayer);
         }
         
-        if (move) {
+        if (move && turnSerial === this.aiTurnSerial && !this.gameOver
+            && this.gameMode === 'pve' && this.currentPlayer === aiPlayer) {
             this.makeMove(move.x, move.y);
             if (this.difficulty === 'grandmaster' && !this.gameOver && move.banter) {
                 this.displayGrandmasterBanter(move.banter, move.analysis);
@@ -121,11 +123,6 @@ Object.assign(GomokuGame.prototype, {
             return blockingMoves[index];
         }
 
-        const urgentDefense = this.findCriticalDefenseMove(opponent, 6800, 2);
-        if (urgentDefense) {
-            return urgentDefense;
-        }
-
         const scoredMoves = candidates
             .map(({ x, y }) => {
                 const evaluation = this.evaluateAdvancedPositionForPlayer(x, y, aiPlayer, {
@@ -162,263 +159,162 @@ Object.assign(GomokuGame.prototype, {
         return { x: scoredMoves[index].x, y: scoredMoves[index].y };
     },
 
-    // 中等难度AI：基于评分机制
-
+    // 中等难度：少量候选，计算一轮双方应手，减少无意义的随机漏防。
     getMediumMove(aiPlayer) {
-        const opponent = this.getOpponent(aiPlayer);
-        const scoredMoves = [];
-        
-        // 检查是否有获胜或防守的机会
-        for (let i = 0; i < this.boardSize; i++) {
-            for (let j = 0; j < this.boardSize; j++) {
-                if (this.board[i][j] === null) {
-                    // 尝试放置AI棋子
-                    this.board[i][j] = aiPlayer;
-                    if (this.checkWin(i, j)) {
-                        this.board[i][j] = null;
-                        return { x: i, y: j };
-                    }
-                    this.board[i][j] = null;
-                    
-                    // 尝试放置对手棋子（防守）
-                    this.board[i][j] = opponent;
-                    if (this.checkWin(i, j)) {
-                        this.board[i][j] = null;
-                        return { x: i, y: j };
-                    }
-                    this.board[i][j] = null;
-                }
-            }
-        }
-        
-        const criticalDefense = this.findCriticalDefenseMove(opponent, 6200);
-        if (criticalDefense) {
-            return criticalDefense;
-        }
-
-        const urgentThreatMoves = this.findUrgentThreatMoves(opponent, 7800, 3);
-        if (urgentThreatMoves.length > 0) {
-            const strategicDefense = this.selectStrategicDefenseMove(aiPlayer, urgentThreatMoves, 1);
-            if (strategicDefense) {
-                return strategicDefense;
-            }
-        }
-
-        const forcingAttack = this.findForcingAttack(aiPlayer, 8800);
-        if (forcingAttack) {
-            return forcingAttack;
-        }
-
-        // 否则基于评分选择最佳位置
-        let candidates = this.getCandidateMoves(2);
-        if (candidates.length < 6) {
-            const expanded = this.getCandidateMoves(3);
-            const seen = new Set(candidates.map(({ x, y }) => `${x},${y}`));
-            for (const move of expanded) {
-                const key = `${move.x},${move.y}`;
-                if (!seen.has(key)) {
-                    seen.add(key);
-                    candidates.push(move);
-                }
-            }
-        }
-
-        for (const { x, y } of candidates) {
-            const aggressiveScore = this.evaluateAdvancedPositionForPlayer(x, y, aiPlayer, {
-                centerWeight: 44,
-                offensiveMultiplier: 1.32,
-                defensiveMultiplier: 0.45,
-                adjacencyWeight: 60,
-                adjacencyRadius: 2,
-                threatWeight: 1.05,
-                forkWeight: 0.9,
-                defensiveThreatWeight: 0.65,
-                defensiveForkWeight: 0.6
-            });
-            const safetyScore = this.evaluateAdvancedPositionForPlayer(x, y, opponent, {
-                centerWeight: 20,
-                offensiveMultiplier: 1.08,
-                defensiveMultiplier: 0.48,
-                adjacencyWeight: 36,
-                adjacencyRadius: 2,
-                threatWeight: 0.78,
-                forkWeight: 0.6,
-                defensiveThreatWeight: 0.4,
-                defensiveForkWeight: 0.35
-            });
-            const variability = Math.random() * 24;
-            const score = aggressiveScore + safetyScore * 0.55 + variability;
-            scoredMoves.push({ x, y, score });
-        }
-
-        if (scoredMoves.length === 0) {
-            return this.getEasyMove(aiPlayer);
-        }
-
-        const orderedMoves = scoredMoves.sort((a, b) => b.score - a.score);
-        const selection = this.selectRandomizedMove(orderedMoves, {
-            topN: Math.min(5, orderedMoves.length),
-            temperature: 0.85
+        return this.getSearchedMove(aiPlayer, {
+            maxDepth: 2,
+            timeLimit: 180,
+            rootWidth: 10,
+            nodeLimit: 2000
         });
-
-        if (selection) {
-            return { x: selection.x, y: selection.y };
-        }
-
-        return this.getEasyMove(aiPlayer);
     },
 
-    // 困难难度AI：更复杂的评分和搜索
+    // 困难难度：按对手最强应手搜索，只有完整算完的一层才能替换结果。
+    async getHardMoveAsync(aiPlayer) {
+        if (typeof Worker === 'undefined') return this.getHardMove(aiPlayer);
+        return new Promise(resolve => {
+            let worker;
+            try {
+                worker = new Worker('ai-worker.js?v=20261008-1');
+            } catch {
+                resolve(this.getHardMove(aiPlayer));
+                return;
+            }
+            const finish = move => {
+                worker.terminate();
+                if (this.aiSearchWorker === worker) {
+                    this.aiSearchWorker = null;
+                    this.cancelAiSearch = null;
+                }
+                resolve(move);
+            };
+            this.aiSearchWorker = worker;
+            this.cancelAiSearch = () => finish(null);
+            worker.onmessage = event => finish(event.data);
+            worker.onerror = () => finish(this.getHardMove(aiPlayer));
+            worker.postMessage({ board: this.board, moveHistory: this.moveHistory, aiPlayer });
+        });
+    },
 
     getHardMove(aiPlayer) {
-        const opponent = this.getOpponent(aiPlayer);
-        let bestScore = -Infinity;
-        let bestMove = null;
+        return this.getSearchedMove(aiPlayer);
+    },
 
-        // 先处理己方即杀，避免错过直接终局。
-        const winningMoves = this.getImmediateWinningMoves(aiPlayer, 2);
-        if (winningMoves.length > 0) {
-            return this.selectMostPromisingMove(aiPlayer, winningMoves, 1) || winningMoves[0];
+    getSearchedMove(aiPlayer, options = {}) {
+        const { maxDepth = 6, timeLimit = 1200, rootWidth = 16, nodeLimit = 12000 } = options;
+        const candidates = this.getSearchMoves(aiPlayer);
+        if (candidates.length === 0) return null;
+        if (candidates[0].win || candidates.length === 1) {
+            return { x: candidates[0].x, y: candidates[0].y };
         }
 
-        // 对手有即杀点时，必须先解杀。
-        const opponentWinningMoves = this.getImmediateWinningMoves(opponent, 2);
-        if (opponentWinningMoves.length > 0) {
-            const forcedThreats = opponentWinningMoves.map(({ x, y }) => ({ x, y, severity: 10000 }));
-            const forcedDefense = this.selectStrategicDefenseMove(aiPlayer, forcedThreats, 2);
-            if (forcedDefense) {
-                return forcedDefense;
-            }
-            return opponentWinningMoves[0];
-        }
-
-        const tacticalMove = this.findBestTacticalMove(aiPlayer, opponent, 2);
-        if (tacticalMove) {
-            return tacticalMove;
-        }
-
-        const criticalDefense = this.findCriticalDefenseMove(opponent, 5200);
-        if (criticalDefense) {
-            return criticalDefense;
-        }
-
-        const urgentThreatMoves = this.findUrgentThreatMoves(opponent, 7600, 3);
-        if (urgentThreatMoves.length > 0) {
-            const strategicDefense = this.selectStrategicDefenseMove(aiPlayer, urgentThreatMoves, 2);
-            if (strategicDefense) {
-                return strategicDefense;
-            }
-        }
-
-        const forcingAttack = this.findForcingAttack(aiPlayer, 8600);
-        if (forcingAttack) {
-            this.board[forcingAttack.x][forcingAttack.y] = aiPlayer;
-            const unsafeCounter = this.getImmediateWinningMoves(opponent, 2).length > 0;
-            this.board[forcingAttack.x][forcingAttack.y] = null;
-            if (!unsafeCounter) {
-                return forcingAttack;
-            }
-        }
-
-        // 使用更深的评分和浅层搜索
-        let candidates = this.getCandidateMoves(2);
-        if (candidates.length < 8) {
-            const expanded = this.getCandidateMoves(3);
-            const seen = new Set(candidates.map(({ x, y }) => `${x},${y}`));
-            for (const move of expanded) {
-                const key = `${move.x},${move.y}`;
-                if (!seen.has(key)) {
-                    seen.add(key);
-                    candidates.push(move);
+        const context = {
+            deadline: performance.now() + timeLimit,
+            nodes: 0,
+            nodeLimit,
+            timeout: {},
+            table: new Map()
+        };
+        let bestMove = candidates[0];
+        // 每层均保留攻防候选，避免只计算自己想下的棋。
+        const rootMoves = candidates.slice(0, rootWidth);
+        for (let depth = 2; depth <= maxDepth; depth++) {
+            context.table.clear();
+            let layerBest = null;
+            let layerScore = -Infinity;
+            let alpha = -Infinity;
+            try {
+                for (const move of rootMoves) {
+                    this.checkSearchBudget(context);
+                    this.board[move.x][move.y] = aiPlayer;
+                    let score;
+                    try {
+                        score = this.minimaxSearch(depth - 1, alpha, Infinity,
+                            this.getOpponent(aiPlayer), aiPlayer, depth, context);
+                    } finally {
+                        this.board[move.x][move.y] = null;
+                    }
+                    if (score > layerScore) {
+                        layerScore = score;
+                        layerBest = move;
+                    }
+                    alpha = Math.max(alpha, score);
                 }
+            } catch (error) {
+                if (error !== context.timeout) throw error;
+                break;
             }
+            bestMove = layerBest || bestMove;
+            rootMoves.sort((a, b) => Number(b === bestMove) - Number(a === bestMove) || b.score - a.score);
+            if (layerScore > 90000000) break;
         }
+        return { x: bestMove.x, y: bestMove.y };
+    },
 
-        const scoredCandidates = candidates
-            .map(({ x, y }) => {
-                const advancedScore = this.evaluateAdvancedPositionForPlayer(x, y, aiPlayer, {
-                    centerWeight: 56,
-                    offensiveMultiplier: 1.72,
-                    defensiveMultiplier: 0.52,
-                    adjacencyWeight: 94,
-                    adjacencyRadius: 2,
-                    threatWeight: 1.45,
-                    forkWeight: 1.28,
-                    defensiveThreatWeight: 0.7,
-                    defensiveForkWeight: 0.62
-                });
-                const analysis = this.analyzePlacement(x, y, aiPlayer);
-                const bonusStats = analysis ? analysis.lineStats : [];
-                const pressure = bonusStats.length ? this.calculateOffensivePressure(bonusStats) : 0;
-                const chainPotential = bonusStats.length ? this.calculateChainPotential(bonusStats) : 0;
-                const priorityScore = pressure * 0.55 + chainPotential * 0.9;
-                return {
-                    x,
-                    y,
-                    baseScore: advancedScore + priorityScore
-                };
-            })
-            .sort((a, b) => b.baseScore - a.baseScore);
-
-        const stonesPlayed = this.moveHistory.length;
-        const searchDepth = stonesPlayed < 8 ? 4 : (stonesPlayed < 24 ? 3 : 2);
-        const limit = Math.min(searchDepth >= 4 ? 6 : (searchDepth === 3 ? 8 : 10), scoredCandidates.length);
-
-        for (let index = 0; index < limit; index++) {
-            const { x, y, baseScore } = scoredCandidates[index];
-            if (this.board[x][y] !== null) continue;
-
-            this.board[x][y] = aiPlayer;
-            const immediateWin = this.checkWin(x, y);
-            const offensiveStats = this.collectLineStats(x, y, aiPlayer);
-            const offensiveProfile = this.getThreatProfile(offensiveStats);
-            const forkBonus = this.calculateForkBonus(offensiveStats);
-            const forcingSeverity = this.evaluateOffenseSeverity(offensiveProfile);
-            const pressureScore = this.calculateOffensivePressure(offensiveStats);
-            const chainPotential = this.calculateChainPotential(offensiveStats);
-            const immediateAdvantage = this.evaluateBoardAdvantage(aiPlayer);
-            const counterRiskPenalty = this.evaluateCounterThreatRisk(aiPlayer, opponent);
-            let lookaheadScore = 0;
-            if (immediateWin) {
-                this.board[x][y] = null;
-                return { x, y };
-            }
-
-            const opponentImmediateWins = this.getImmediateWinningMoves(opponent, 2).length;
-            if (opponentImmediateWins > 0) {
-                this.board[x][y] = null;
-                continue;
-            }
-
-            if (forcingSeverity >= 9400 || forkBonus >= 24000 || pressureScore >= 11000 || chainPotential >= 11000) {
-                this.board[x][y] = null;
-                return { x, y };
-            }
-
-            lookaheadScore = this.minimaxSearch(searchDepth, -Infinity, Infinity, opponent, aiPlayer, searchDepth);
-            this.board[x][y] = null;
-
-            const effectiveLookahead = Number.isFinite(lookaheadScore) ? lookaheadScore : 0;
-            const totalScore = effectiveLookahead * 0.55
-                + baseScore * 0.35
-                + forkBonus * 0.008
-                + forcingSeverity * 2.2
-                + pressureScore * 0.5
-                + chainPotential * 0.65
-                + immediateAdvantage * 0.45
-                + counterRiskPenalty;
-
-            if (totalScore > bestScore) {
-                bestScore = totalScore;
-                bestMove = { x, y };
-            }
+    checkSearchBudget(context) {
+        if (!context) return;
+        context.nodes++;
+        if (context.nodes > context.nodeLimit || performance.now() >= context.deadline) {
+            throw context.timeout;
         }
+    },
 
-        if (bestMove) {
-            return bestMove;
+    // 评分只用于排序；成五和必须挡住的点不受候选宽度限制。
+    getSearchMoves(player) {
+        const opponent = this.getOpponent(player);
+        const moves = this.getCandidateMoves(2).map(({ x, y }) => {
+            const attack = this.analyzePlacement(x, y, player);
+            const defense = this.analyzePlacement(x, y, opponent);
+            const attackScore = this.scoreSearchThreat(attack);
+            const defenseScore = this.scoreSearchThreat(defense);
+            return {
+                x, y,
+                win: attack.lineStats.some(stats => stats.length >= 5),
+                block: defense.lineStats.some(stats => stats.length >= 5),
+                attackScore,
+                defenseScore,
+                score: Math.max(attackScore, defenseScore * 1.08)
+                    + Math.min(attackScore, defenseScore) * 0.15
+                    + this.centerBias(x, y, 3)
+            };
+        });
+        moves.sort((a, b) => b.score - a.score);
+        const wins = moves.filter(move => move.win);
+        if (wins.length) return wins;
+        const blocks = moves.filter(move => move.block);
+        return blocks.length ? blocks : moves;
+    },
+
+    scoreSearchThreat(analysis) {
+        const stats = analysis.lineStats;
+        if (stats.some(line => line.length >= 5)) return 100000000;
+        const profile = this.getThreatProfile(stats);
+        const { openFours, semiOpenFours, openThrees } = profile;
+        if (openFours || semiOpenFours >= 2) return 1000000;
+        if (semiOpenFours && openThrees) return 150000;
+        if (openThrees >= 2) return 60000;
+        return analysis.score + semiOpenFours * 12000 + openThrees * 3000;
+    },
+
+    evaluateSearchPosition(aiPlayer, moves = null, currentPlayer = aiPlayer) {
+        const opponent = this.getOpponent(aiPlayer);
+        let ownBest = 0;
+        let ownSecond = 0;
+        let enemyBest = 0;
+        let enemySecond = 0;
+        const scored = moves || this.getCandidateMoves(2).map(({ x, y }) => ({
+            attackScore: this.scoreSearchThreat(this.analyzePlacement(x, y, aiPlayer)),
+            defenseScore: this.scoreSearchThreat(this.analyzePlacement(x, y, opponent))
+        }));
+        for (const move of scored) {
+            const own = currentPlayer === aiPlayer ? move.attackScore : move.defenseScore;
+            const enemy = currentPlayer === aiPlayer ? move.defenseScore : move.attackScore;
+            if (own > ownBest) { ownSecond = ownBest; ownBest = own; }
+            else if (own > ownSecond) ownSecond = own;
+            if (enemy > enemyBest) { enemySecond = enemyBest; enemyBest = enemy; }
+            else if (enemy > enemySecond) enemySecond = enemy;
         }
-
-        return this.getMediumMove(aiPlayer);
+        return ownBest + ownSecond * 0.2 - enemyBest - enemySecond * 0.2;
     },
 
     findCriticalDefenseMove(opponent, minSeverity = 5000, radius = 3) {
@@ -826,103 +722,52 @@ Object.assign(GomokuGame.prototype, {
         return bestPressure;
     },
 
-    minimaxSearch(depth, alpha, beta, currentPlayer, aiPlayer, initialDepth = depth) {
-        if (depth === 0 || this.isBoardFull()) {
-            return this.evaluateBoardAdvantage(aiPlayer);
+    minimaxSearch(depth, alpha, beta, currentPlayer, aiPlayer, initialDepth = depth, context = null, extensions = 0) {
+        this.checkSearchBudget(context);
+        const maximizing = currentPlayer === aiPlayer;
+        const ply = initialDepth - depth + extensions;
+        const candidates = this.getSearchMoves(currentPlayer);
+        if (!candidates.length) return 0;
+        if (candidates[0].win) {
+            return maximizing ? 100000000 - ply * 1000 : -100000000 + ply * 1000;
         }
-
-        const maximizingPlayer = currentPlayer === aiPlayer;
-        let candidates = this.getCandidateMoves(2);
-
-        if (candidates.length === 0) {
-            return this.evaluateBoardAdvantage(aiPlayer);
+        // 两个不同的即杀点无法用一手同时挡住。
+        if (candidates.length > 1 && candidates[0].block) {
+            return maximizing ? -100000000 + (ply + 1) * 1000 : 100000000 - (ply + 1) * 1000;
         }
-
-        const orderingWeights = maximizingPlayer
-            ? {
-                centerWeight: 50,
-                offensiveMultiplier: 1.35,
-                defensiveMultiplier: 0.45,
-                adjacencyWeight: 70,
-                adjacencyRadius: 2,
-                threatWeight: 1,
-                forkWeight: 1.05,
-                defensiveThreatWeight: 0.7,
-                defensiveForkWeight: 0.65
-            }
-            : {
-                centerWeight: 48,
-                offensiveMultiplier: 1.3,
-                defensiveMultiplier: 0.55,
-                adjacencyWeight: 60,
-                adjacencyRadius: 2,
-                threatWeight: 0.95,
-                forkWeight: 0.95,
-                defensiveThreatWeight: 0.75,
-                defensiveForkWeight: 0.7
-            };
-
-        const orderedMoves = candidates
-            .map(({ x, y }) => ({
-                x,
-                y,
-                score: this.evaluateAdvancedPositionForPlayer(x, y, currentPlayer, orderingWeights)
-            }))
-            .sort((a, b) => maximizingPlayer ? b.score - a.score : a.score - b.score);
-
-        const primaryWidth = initialDepth >= 3 ? 7 : 10;
-        const secondaryWidth = initialDepth >= 3 ? 5 : 6;
-        const moveLimit = Math.min(depth === initialDepth ? primaryWidth : secondaryWidth, orderedMoves.length);
-        if (moveLimit === 0) {
-            return this.evaluateBoardAdvantage(aiPlayer);
+        // 搜索到边界时继续算完强制挡四，避免把尚未处理的威胁当作静态局面。
+        if (depth <= 0 && (!candidates[0].block || extensions >= 4)) {
+            return candidates[0].block ? this.evaluateSearchPosition(aiPlayer)
+                : this.evaluateSearchPosition(aiPlayer, candidates, currentPlayer);
         }
-
-        let bestValue = maximizingPlayer ? -Infinity : Infinity;
-        const opponent = this.getOpponent(currentPlayer);
-
-        for (let i = 0; i < moveLimit; i++) {
-            const { x, y } = orderedMoves[i];
-            if (this.board[x][y] !== null) continue;
-
+        const key = context ? `${currentPlayer}:${depth}:${extensions}:${this.board.map(row => row.map(cell => cell === 'black' ? 'b' : cell === 'white' ? 'w' : '.').join('')).join('')}` : '';
+        const cached = context?.table.get(key);
+        if (cached !== undefined) return cached;
+        const limit = Math.min(depth >= 3 ? 10 : 8, candidates.length);
+        let bestValue = maximizing ? -Infinity : Infinity;
+        let cutOff = false;
+        const originalAlpha = alpha;
+        const originalBeta = beta;
+        for (const { x, y } of candidates.slice(0, limit)) {
+            this.checkSearchBudget(context);
             this.board[x][y] = currentPlayer;
-            const hasWin = this.checkWin(x, y);
-            let nodeValue;
-
-            if (hasWin) {
-                nodeValue = currentPlayer === aiPlayer
-                    ? 100000 - depth * 500
-                    : -100000 + depth * 500;
-            } else {
-                nodeValue = this.minimaxSearch(depth - 1, alpha, beta, opponent, aiPlayer, initialDepth);
+            let value;
+            try {
+                value = this.minimaxSearch(Math.max(0, depth - 1), alpha, beta,
+                    this.getOpponent(currentPlayer), aiPlayer, initialDepth, context,
+                    extensions + (depth <= 0 ? 1 : 0));
+            } finally {
+                this.board[x][y] = null;
             }
-
-            this.board[x][y] = null;
-
-            if (maximizingPlayer) {
-                if (nodeValue > bestValue) {
-                    bestValue = nodeValue;
-                }
-                if (nodeValue > alpha) {
-                    alpha = nodeValue;
-                }
-            } else {
-                if (nodeValue < bestValue) {
-                    bestValue = nodeValue;
-                }
-                if (nodeValue < beta) {
-                    beta = nodeValue;
-                }
-            }
-
-            if (beta <= alpha) {
-                break;
-            }
+            bestValue = maximizing ? Math.max(bestValue, value) : Math.min(bestValue, value);
+            if (maximizing) alpha = Math.max(alpha, bestValue);
+            else beta = Math.min(beta, bestValue);
+            if (beta <= alpha) { cutOff = true; break; }
         }
-
-        if (!Number.isFinite(bestValue)) {
-            return this.evaluateBoardAdvantage(aiPlayer);
+        // 窗口外的值只是上下界，不能作为精确值复用。
+        if (context && !cutOff && bestValue > originalAlpha && bestValue < originalBeta) {
+            context.table.set(key, bestValue);
         }
-
         return bestValue;
     },
 
@@ -1287,6 +1132,39 @@ Object.assign(GomokuGame.prototype, {
             }
         }
 
+        if (length >= 5) return { length, openEnds };
+        const line = [];
+        for (let offset = -5; offset <= 5; offset++) {
+            const row = x + dx * offset;
+            const col = y + dy * offset;
+            line.push(!this.isInsideBoard(row, col) ? '#'
+                : this.board[row][col] === player ? 'X'
+                    : this.board[row][col] === null ? '.' : '#');
+        }
+        const winningPoints = new Set();
+        for (let start = 1; start <= 5; start++) {
+            let own = 0;
+            let empty = -1;
+            for (let index = start; index < start + 5; index++) {
+                if (line[index] === 'X') own++;
+                else if (line[index] === '.') empty = index;
+            }
+            if (own === 4 && empty !== -1) winningPoints.add(empty);
+        }
+        if (winningPoints.size) return { length: 4, openEnds: Math.min(2, winningPoints.size) };
+        for (let start = 0; start <= 5; start++) {
+            // 当前棋子必须在中间四格；两端必须为空，不能把边界当成活口。
+            if (5 <= start || 5 >= start + 5 || line[start] !== '.' || line[start + 5] !== '.') continue;
+            let own = 0;
+            let empty = false;
+            for (let index = start + 1; index < start + 5; index++) {
+                if (line[index] === 'X') own++;
+                else if (line[index] === '.') empty = true;
+            }
+            if (own === 3 && empty) return { length: 3, openEnds: 2 };
+        }
+        // 连续三子的两端为空仍可能因为外侧封堵而无法形成活四。
+        if (length === 3 && openEnds === 2) openEnds = 1;
         return { length, openEnds };
     },
 

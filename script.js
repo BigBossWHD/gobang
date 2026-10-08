@@ -13,6 +13,9 @@ class GomokuGame {
         this.humanPlayer = null; // 当前玩家身份
         this.aiPlayer = null; // 当前AI身份
         this.aiTimeoutId = null; // 记录AI延迟
+        this.aiTurnSerial = 0;
+        this.aiSearchWorker = null;
+        this.cancelAiSearch = null;
         this.resultModal = null;
         this.resultModalMessage = null;
         this.resultModalTitle = null;
@@ -243,13 +246,10 @@ class GomokuGame {
     }
 
     undoMove() {
+        if (this.moveHistory.length === 0) return;
         this.cancelScheduledAIMove();
         this.hideResultModal();
         this.cancelOngoingLlmRequest();
-
-        if (this.moveHistory.length === 0) {
-            return; // 没有棋可悔
-        }
 
         const revertLastMove = () => {
             const move = this.moveHistory.pop();
@@ -325,6 +325,7 @@ class GomokuGame {
         const message = document.getElementById('message');
         message.textContent = '';
 
+        this.messageState = 'idle';
         this.clearLastMoveHighlight();
         this.renderBoard();
 
@@ -603,12 +604,14 @@ class GomokuGame {
                 await this.makeAIMove();
             } catch (error) {
                 console.error('AI move execution failed:', error);
-        this.showInfoMessage('AI 落子失败，已保留当前局面。');
+                this.showInfoMessage('AI 落子失败，已保留当前局面。');
             }
         }, delay);
     }
 
     cancelScheduledAIMove() {
+        this.aiTurnSerial++;
+        if (this.cancelAiSearch) this.cancelAiSearch();
         if (this.aiTimeoutId) {
             clearTimeout(this.aiTimeoutId);
             this.aiTimeoutId = null;
