@@ -201,3 +201,70 @@ test('连续冲四深层预算耗尽会恢复试放的攻防棋子', () => {
     assert.throws(() => game.findContinuousFour('white', 6, context), error => error === context.timeout);
     assert.equal(JSON.stringify(game.board), before);
 });
+
+
+const defenseBlack = [[7, 10], [5, 8], [3, 8], [6, 11], [8, 7], [4, 8], [10, 7], [10, 10], [5, 11], [4, 10], [11, 10]];
+const defenseWhite = [[5, 3], [9, 10], [6, 10], [7, 8], [7, 9], [9, 9], [4, 4], [9, 6], [6, 5], [9, 4], [3, 6]];
+for (const [name, transform] of [['原位', ([x, y]) => [x, y]], ['镜像', ([x, y]) => [x, 14 - y]]]) {
+    for (const player of ['white', 'black']) {
+        test(`困难拆连续杀棋：${name}/${player} 提前封住关键点`, () => {
+            const game = player === 'white' ? position(defenseBlack.map(transform), defenseWhite.map(transform))
+                : position(defenseWhite.map(transform), defenseBlack.map(transform));
+            const before = JSON.stringify(game.board);
+            const opponent = game.getOpponent(player);
+            // 旧版选择的抢攻点，会给对手留下经过逐手验证的强制胜法。
+            const [oldX, oldY] = transform([9, 7]);
+            game.board[oldX][oldY] = player;
+            const [firstX, firstY] = transform([9, 8]);
+            game.board[firstX][firstY] = opponent;
+            const wins = game.getImmediateWinningMoves(opponent);
+            assert.deepEqual(Array.from(wins, m => [m.x, m.y]), [transform([8, 9])]);
+            assert.equal(game.getImmediateWinningMoves(player).length, 0);
+            const [blockX, blockY] = transform([8, 9]);
+            game.board[blockX][blockY] = player;
+            const [secondX, secondY] = transform([10, 9]);
+            game.board[secondX][secondY] = opponent;
+            assert.equal(game.getImmediateWinningMoves(opponent).length, 2);
+            assert.equal(game.getImmediateWinningMoves(player).length, 0);
+            game.board = JSON.parse(before);
+            const move = game.getHardMove(player);
+            assert.deepEqual([move.x, move.y], transform([9, 8]));
+            assert.equal(JSON.stringify(game.board), before);
+            game.board[move.x][move.y] = player;
+            assert.equal(game.findContinuousFour(opponent, 6, forcingContext()), null);
+        });
+    }
+}
+
+test('杀棋防守点即使在普通候选宽度之外也纳入搜索', () => {
+    const game = position(defenseBlack, defenseWhite);
+    const before = JSON.stringify(game.board);
+    const root = [{ x: 9, y: 7, score: 1 }];
+    const defenses = game.filterLosingDefenses('white', root, 6, forcingContext());
+    assert.ok(defenses.some(move => move.x === 9 && move.y === 8));
+    assert.ok(!defenses.some(move => move.x === 9 && move.y === 7));
+    assert.equal(JSON.stringify(game.board), before);
+});
+
+test('防守筛选超时保留未证明的应手并恢复棋盘', () => {
+    const game = position(defenseBlack, defenseWhite);
+    const before = JSON.stringify(game.board);
+    const proofContext = forcingContext();
+    game.findContinuousFour('black', 6, proofContext);
+    const limited = forcingContext();
+    limited.nodeLimit = proofContext.nodes + 1;
+    const root = game.getSearchMoves('white').slice(0, 16);
+    const defenses = game.filterLosingDefenses('white', root, 6, limited);
+    assert.ok(defenses.length > 0);
+    assert.ok(defenses.some(move => move.x === 9 && move.y === 8));
+    assert.equal(JSON.stringify(game.board), before);
+});
+
+test('所有防守都被证明无法解杀时保留合法回退', () => {
+    const game = position([[7, 4], [7, 5], [7, 6], [7, 7]], [[6, 6]]);
+    const before = JSON.stringify(game.board);
+    const root = game.getSearchMoves('white');
+    const defenses = game.filterLosingDefenses('white', root, 6, forcingContext());
+    assert.equal(defenses, root);
+    assert.equal(JSON.stringify(game.board), before);
+});

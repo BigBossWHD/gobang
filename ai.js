@@ -176,7 +176,7 @@ Object.assign(GomokuGame.prototype, {
         return new Promise(resolve => {
             let worker;
             try {
-                worker = new Worker('ai-worker.js?v=20261008-6');
+                worker = new Worker('ai-worker.js?v=20261008-7');
             } catch {
                 resolve(this.getHardMove(aiPlayer));
                 return;
@@ -218,7 +218,7 @@ Object.assign(GomokuGame.prototype, {
             table: new Map()
         };
         // 连续冲四专用搜索能越过普通搜索的宽度和层数限制。
-        if (forcingDepth > 0 && timeLimit > 0) {
+        if (forcingDepth > 0 && timeLimit > 0 && candidates.some(move => move.attackScore >= 12000)) {
             const forcingContext = {
                 deadline: Math.min(deadline, performance.now() + timeLimit * 0.25),
                 nodes: 0,
@@ -232,9 +232,19 @@ Object.assign(GomokuGame.prototype, {
                 if (error !== forcingContext.timeout) throw error;
             }
         }
-        let bestMove = candidates[0];
-        // 每层均保留攻防候选，避免只计算自己想下的棋。
-        const rootMoves = candidates.slice(0, rootWidth);
+        // 发现对方连续冲四后，排除已证明会输的应手，再做常规搜索。
+        let rootMoves = candidates.slice(0, rootWidth);
+        if (forcingDepth > 0 && timeLimit > 0 && performance.now() < deadline
+            && candidates.some(move => move.defenseScore >= 12000)) {
+            const defenseContext = {
+                deadline: Math.min(deadline, performance.now() + timeLimit * 0.25),
+                nodes: 0,
+                nodeLimit: Math.min(nodeLimit, 3000),
+                timeout: {}
+            };
+            rootMoves = this.filterLosingDefenses(aiPlayer, rootMoves, forcingDepth, defenseContext);
+        }
+        let bestMove = rootMoves[0];
         for (let depth = 2; depth <= maxDepth; depth++) {
             context.table.clear();
             let layerBest = null;
@@ -268,13 +278,54 @@ Object.assign(GomokuGame.prototype, {
         return { x: bestMove.x, y: bestMove.y };
     },
 
+    filterLosingDefenses(player, rootMoves, forcingDepth, context) {
+        const opponent = this.getOpponent(player);
+        let threat;
+        try {
+            threat = this.findContinuousFour(opponent, forcingDepth, context);
+        } catch (error) {
+            if (error !== context.timeout) throw error;
+            return rootMoves;
+        }
+        if (!threat) return rootMoves;
+        // 杀棋线路上的点和己方冲四反击都纳入候选，避免宽度限制漏掉解法。
+        const moves = rootMoves.slice();
+        const extraMoves = [
+            ...this.getSearchMoves(player).filter(move => move.attackScore >= 12000),
+            ...(threat.forcingLine || [threat]).map(move => ({ ...move, score: 0 }))
+        ];
+        for (const move of extraMoves) {
+            if (this.board[move.x][move.y] === null
+                && !moves.some(existing => existing.x === move.x && existing.y === move.y)) {
+                moves.push(move);
+            }
+        }
+        const losing = new Set();
+        for (const move of moves) {
+            this.board[move.x][move.y] = player;
+            try {
+                if (this.findContinuousFour(opponent, forcingDepth, context)) {
+                    losing.add(move);
+                }
+            } catch (error) {
+                if (error !== context.timeout) throw error;
+                // 未算完的应手不能当成输棋；此前已验证的结果仍有效。
+                break;
+            } finally {
+                this.board[move.x][move.y] = null;
+            }
+        }
+        const remaining = moves.filter(move => !losing.has(move));
+        return remaining.length ? remaining : rootMoves;
+    },
+
     // 只返回已证明的冲四必胜线；找不到或预算不足不代表不存在胜法。
     findContinuousFour(attacker, remainingAttacks, context) {
         this.checkSearchBudget(context);
         const defender = this.getOpponent(attacker);
         const moves = this.getSearchMoves(attacker);
         if (!moves.length) return null;
-        if (moves[0].win) return moves[0];
+        if (moves[0].win) return { ...moves[0], forcingLine: [moves[0]] };
         if (remainingAttacks <= 0) return null;
         for (const move of moves) {
             this.checkSearchBudget(context);
@@ -284,13 +335,14 @@ Object.assign(GomokuGame.prototype, {
             try {
                 if (this.getImmediateWinningMoves(defender).length) continue;
                 const wins = this.getImmediateWinningMoves(attacker);
-                if (wins.length >= 2) return move;
+                if (wins.length >= 2) return { ...move, forcingLine: [move, ...wins] };
                 if (wins.length !== 1) continue;
                 const block = wins[0];
                 this.board[block.x][block.y] = defender;
                 try {
-                    if (this.findContinuousFour(attacker, remainingAttacks - 1, context)) {
-                        return move;
+                    const continuation = this.findContinuousFour(attacker, remainingAttacks - 1, context);
+                    if (continuation) {
+                        return { ...move, forcingLine: [move, block, ...continuation.forcingLine] };
                     }
                 } finally {
                     this.board[block.x][block.y] = null;
