@@ -159,13 +159,14 @@ Object.assign(GomokuGame.prototype, {
         return { x: scoredMoves[index].x, y: scoredMoves[index].y };
     },
 
-    // 中等难度：少量候选，计算一轮双方应手，减少无意义的随机漏防。
+    // 中等难度：少量候选，迭代计算最多三层双方应手。
     getMediumMove(aiPlayer) {
         return this.getSearchedMove(aiPlayer, {
-            maxDepth: 2,
-            timeLimit: 180,
-            rootWidth: 10,
-            nodeLimit: 2000
+            maxDepth: 3,
+            timeLimit: 250,
+            rootWidth: 12,
+            nodeLimit: 3000,
+            forcingDepth: 0
         });
     },
 
@@ -175,7 +176,7 @@ Object.assign(GomokuGame.prototype, {
         return new Promise(resolve => {
             let worker;
             try {
-                worker = new Worker('ai-worker.js?v=20261008-1');
+                worker = new Worker('ai-worker.js?v=20261008-6');
             } catch {
                 resolve(this.getHardMove(aiPlayer));
                 return;
@@ -201,7 +202,8 @@ Object.assign(GomokuGame.prototype, {
     },
 
     getSearchedMove(aiPlayer, options = {}) {
-        const { maxDepth = 6, timeLimit = 1200, rootWidth = 16, nodeLimit = 12000 } = options;
+        const { maxDepth = 6, timeLimit = 1200, rootWidth = 16, nodeLimit = 12000, forcingDepth = 6 } = options;
+        const deadline = performance.now() + timeLimit;
         const candidates = this.getSearchMoves(aiPlayer);
         if (candidates.length === 0) return null;
         if (candidates[0].win || candidates.length === 1) {
@@ -209,12 +211,27 @@ Object.assign(GomokuGame.prototype, {
         }
 
         const context = {
-            deadline: performance.now() + timeLimit,
+            deadline,
             nodes: 0,
             nodeLimit,
             timeout: {},
             table: new Map()
         };
+        // 连续冲四专用搜索能越过普通搜索的宽度和层数限制。
+        if (forcingDepth > 0 && timeLimit > 0) {
+            const forcingContext = {
+                deadline: Math.min(deadline, performance.now() + timeLimit * 0.25),
+                nodes: 0,
+                nodeLimit: Math.min(nodeLimit, 2000),
+                timeout: {}
+            };
+            try {
+                const forced = this.findContinuousFour(aiPlayer, forcingDepth, forcingContext);
+                if (forced) return { x: forced.x, y: forced.y };
+            } catch (error) {
+                if (error !== forcingContext.timeout) throw error;
+            }
+        }
         let bestMove = candidates[0];
         // 每层均保留攻防候选，避免只计算自己想下的棋。
         const rootMoves = candidates.slice(0, rootWidth);
@@ -249,6 +266,40 @@ Object.assign(GomokuGame.prototype, {
             if (layerScore > 90000000) break;
         }
         return { x: bestMove.x, y: bestMove.y };
+    },
+
+    // 只返回已证明的冲四必胜线；找不到或预算不足不代表不存在胜法。
+    findContinuousFour(attacker, remainingAttacks, context) {
+        this.checkSearchBudget(context);
+        const defender = this.getOpponent(attacker);
+        const moves = this.getSearchMoves(attacker);
+        if (!moves.length) return null;
+        if (moves[0].win) return moves[0];
+        if (remainingAttacks <= 0) return null;
+        for (const move of moves) {
+            this.checkSearchBudget(context);
+            // 分数只做预筛；下面用真实成五点验证，不凭棋型分数宣告必胜。
+            if (move.attackScore < 12000) continue;
+            this.board[move.x][move.y] = attacker;
+            try {
+                if (this.getImmediateWinningMoves(defender).length) continue;
+                const wins = this.getImmediateWinningMoves(attacker);
+                if (wins.length >= 2) return move;
+                if (wins.length !== 1) continue;
+                const block = wins[0];
+                this.board[block.x][block.y] = defender;
+                try {
+                    if (this.findContinuousFour(attacker, remainingAttacks - 1, context)) {
+                        return move;
+                    }
+                } finally {
+                    this.board[block.x][block.y] = null;
+                }
+            } finally {
+                this.board[move.x][move.y] = null;
+            }
+        }
+        return null;
     },
 
     checkSearchBudget(context) {

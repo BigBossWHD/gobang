@@ -149,3 +149,55 @@ test('预算在搜索前耗尽也有合法回退，不改变棋盘', () => {
     assert.equal(game.board[move.x][move.y], null);
     assert.equal(JSON.stringify(game.board), before);
 });
+
+
+const forcingBlack = [[10, 6], [7, 5], [5, 8], [9, 5], [9, 7], [9, 10], [8, 8]];
+const forcingWhite = [[4, 10], [4, 7], [7, 7], [9, 6], [5, 6], [7, 6], [10, 5], [8, 5], [9, 9], [6, 9]];
+function forcingContext() {
+    return { deadline: performance.now() + 1000, nodes: 0, nodeLimit: 10000, timeout: {} };
+}
+
+for (const [name, transform] of [['原位', ([x, y]) => [x, y]], ['旋转', ([x, y]) => [y, 14 - x]]]) {
+    for (const player of ['white', 'black']) {
+        test(`困难连续冲四：${name}/${player} 找到三次进攻的必胜线`, () => {
+            const attackers = forcingWhite.map(transform);
+            const defenders = forcingBlack.map(transform);
+            const game = player === 'white' ? position(defenders, attackers) : position(attackers, defenders);
+            const before = JSON.stringify(game.board);
+            assert.equal(game.findContinuousFour(player, 2, forcingContext()), null);
+            const move = game.getHardMove(player);
+            assert.deepEqual([move.x, move.y], transform([7, 8]));
+            assert.equal(JSON.stringify(game.board), before);
+            // 固定胜法逐手验证：前两次只能挡一个成五点，第三次产生两个成五点。
+            for (const [attack, block] of [[[7, 8], [8, 7]], [[7, 9], [7, 10]]]) {
+                const [x, y] = transform(attack);
+                game.board[x][y] = player;
+                const wins = game.getImmediateWinningMoves(player);
+                assert.deepEqual(Array.from(wins, m => [m.x, m.y]), [transform(block)]);
+                assert.equal(game.getImmediateWinningMoves(game.getOpponent(player)).length, 0);
+                const [bx, by] = transform(block);
+                game.board[bx][by] = game.getOpponent(player);
+            }
+            const [x, y] = transform([8, 9]);
+            game.board[x][y] = player;
+            assert.equal(game.getImmediateWinningMoves(player).length, 2);
+            assert.equal(game.getImmediateWinningMoves(game.getOpponent(player)).length, 0);
+        });
+    }
+}
+
+test('连续冲四不能忽略对方已经存在的成五点', () => {
+    const game = position([...forcingBlack, [1, 3], [1, 4], [1, 5], [1, 6]], [...forcingWhite, [1, 2]]);
+    const before = JSON.stringify(game.board);
+    assert.equal(game.findContinuousFour('white', 6, forcingContext()), null);
+    assert.equal(JSON.stringify(game.board), before);
+});
+
+test('连续冲四深层预算耗尽会恢复试放的攻防棋子', () => {
+    const game = position(forcingBlack, forcingWhite);
+    const before = JSON.stringify(game.board);
+    const context = forcingContext();
+    context.nodeLimit = 2;
+    assert.throws(() => game.findContinuousFour('white', 6, context), error => error === context.timeout);
+    assert.equal(JSON.stringify(game.board), before);
+});
