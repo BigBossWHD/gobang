@@ -618,8 +618,9 @@ body {
     }
 
     .game-board {
-        grid-template-columns: repeat(15, 32px);
-        grid-template-rows: repeat(15, 32px);
+        --cell-size: min(32px, calc((100vw - 128px) / 15));
+        grid-template-columns: repeat(15, var(--cell-size));
+        grid-template-rows: repeat(15, var(--cell-size));
         padding: 18px;
     }
 
@@ -632,12 +633,12 @@ body {
     }
 
     .game-board::after {
-        background-size: 32px 32px;
+        background-size: var(--cell-size) var(--cell-size);
     }
 
     .game-board-cell {
-        width: 32px;
-        height: 32px;
+        width: var(--cell-size);
+        height: var(--cell-size);
     }
 
     .game-board-cell.black::after,
@@ -650,35 +651,41 @@ body {
 }
 
 @media (max-width: 520px) {
+    .side-panel::before {
+        top: 0;
+        right: 0;
+    }
+
     .container {
         padding: 18px 14px;
     }
 
     .board-wrapper {
-        padding: 18px;
+        padding: 8px;
     }
 
     .game-board {
-        grid-template-columns: repeat(15, 26px);
-        grid-template-rows: repeat(15, 26px);
-        padding: 14px;
+        --cell-size: min(26px, calc((100vw - 88px) / 15));
+        grid-template-columns: repeat(15, var(--cell-size));
+        grid-template-rows: repeat(15, var(--cell-size));
+        padding: 8px;
     }
 
     .game-board::before,
     .game-board::after {
-        top: 14px;
-        left: 14px;
-        right: 14px;
-        bottom: 14px;
+        top: 8px;
+        left: 8px;
+        right: 8px;
+        bottom: 8px;
     }
 
     .game-board::after {
-        background-size: 26px 26px;
+        background-size: var(--cell-size) var(--cell-size);
     }
 
     .game-board-cell {
-        width: 26px;
-        height: 26px;
+        width: var(--cell-size);
+        height: var(--cell-size);
     }
 
     .game-board-cell.black::after,
