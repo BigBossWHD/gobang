@@ -17,14 +17,18 @@ function setup(saved, fetchImpl) {
     return { game: new Game(), storage, context };
 }
 
-test('默认模型、思考和 Max 均进入真实请求载荷', () => {
+test('默认使用 Flash 并关闭思考，不发送思考强度', () => {
     const { game } = setup();
     const payload = game.buildGrandmasterRequestPayload('white');
     assert.equal(payload.model, 'deepseek-flash');
-    assert.equal(payload.thinking.type, 'enabled');
-    assert.equal(payload.reasoning_effort, 'max');
+    assert.equal(payload.thinking.type, 'disabled');
+    assert.equal(payload.reasoning_effort, undefined);
     assert.equal(game.llmRequestTimeoutMs, 120000);
-    assert.equal(payload.temperature, undefined);
+    game.llmConfig.thinkingEnabled = true;
+    const thinkingPayload = game.buildGrandmasterRequestPayload('white');
+    assert.equal(thinkingPayload.thinking.type, 'enabled');
+    assert.equal(thinkingPayload.reasoning_effort, 'max');
+    assert.equal(thinkingPayload.temperature, undefined);
 });
 
 test('旧配置迁移清除保存的密钥，并保留个人设置', () => {
@@ -127,4 +131,15 @@ test('测试失败的具体原因保留给状态面板，且释放按钮', async
     assert.match(game.lastMessage, /401/);
     assert.equal(game.llmConnectionError, game.lastMessage);
     assert.equal(game.llmTestInFlight, false);
+});
+
+
+test('升级仅关闭旧版思考一次，之后保留手动开启的设置', () => {
+    const { game, storage } = setup({ thinkingEnabled: true });
+    assert.equal(game.llmConfig.thinkingEnabled, false);
+    assert.equal(JSON.parse(storage.get('gomoku.llmConfig')).thinkingEnabled, false);
+    game.llmConfig.thinkingEnabled = true;
+    game.persistLlmConfig();
+    const restored = setup(JSON.parse(storage.get('gomoku.llmConfig'))).game;
+    assert.equal(restored.llmConfig.thinkingEnabled, true);
 });

@@ -23,7 +23,8 @@ class GomokuGame {
             endpoint: 'https://api.deepseek.com/v1',
             apiKey: '',
             model: 'deepseek-flash',
-            thinkingEnabled: true,
+            thinkingEnabled: false,
+            thinkingDefaultsVersion: 1,
             reasoningEffort: 'max',
             useReasoningFallback: true
         };
@@ -707,16 +708,19 @@ class GomokuGame {
             // 仅迁移官方端点的旧默认名称，保留第三方服务的自定义模型。
             const migrateLegacyModel = parsed.model === 'deepseek-v4-flash'
                 && /^https:\/\/api\.deepseek\.com(?::443)?(?:\/|$)/i.test(endpoint.trim());
+            // 首次升级关闭旧版默认思考，之后保留用户手动选择。
+            const migrateThinkingDefault = parsed.thinkingDefaultsVersion !== 1;
             this.llmConfig = {
                 endpoint,
                 apiKey: '',
                 model: migrateLegacyModel ? 'deepseek-flash'
                     : (typeof parsed.model === 'string' ? parsed.model : 'deepseek-flash'),
-                thinkingEnabled: typeof parsed.thinkingEnabled === 'boolean' ? parsed.thinkingEnabled : true,
+                thinkingEnabled: !migrateThinkingDefault && parsed.thinkingEnabled === true,
+                thinkingDefaultsVersion: 1,
                 reasoningEffort: parsed.reasoningEffort === 'high' ? 'high' : 'max',
                 useReasoningFallback: typeof parsed.useReasoningFallback === 'boolean' ? parsed.useReasoningFallback : true
             };
-            if (migrateLegacyModel || Object.prototype.hasOwnProperty.call(parsed, 'apiKey')) {
+            if (migrateLegacyModel || migrateThinkingDefault || Object.prototype.hasOwnProperty.call(parsed, 'apiKey')) {
                 this.persistLlmConfig();
             }
         } catch (error) {
@@ -725,7 +729,8 @@ class GomokuGame {
                 endpoint: 'https://api.deepseek.com/v1',
                 apiKey: '',
                 model: 'deepseek-flash',
-                thinkingEnabled: true,
+                thinkingEnabled: false,
+                thinkingDefaultsVersion: 1,
                 reasoningEffort: 'max',
                 useReasoningFallback: true
             };
