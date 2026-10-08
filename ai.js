@@ -176,7 +176,7 @@ Object.assign(GomokuGame.prototype, {
         return new Promise(resolve => {
             let worker;
             try {
-                worker = new Worker('ai-worker.js?v=20261008-7');
+                worker = new Worker('ai-worker.js?v=20261008-8');
             } catch {
                 resolve(this.getHardMove(aiPlayer));
                 return;
@@ -202,7 +202,7 @@ Object.assign(GomokuGame.prototype, {
     },
 
     getSearchedMove(aiPlayer, options = {}) {
-        const { maxDepth = 6, timeLimit = 1200, rootWidth = 16, nodeLimit = 12000, forcingDepth = 6 } = options;
+        const { maxDepth = 6, timeLimit = 1200, rootWidth = 16, nodeLimit = 12000, forcingDepth = 6, threatDepth = 3 } = options;
         const deadline = performance.now() + timeLimit;
         const candidates = this.getSearchMoves(aiPlayer);
         if (candidates.length === 0) return null;
@@ -218,7 +218,7 @@ Object.assign(GomokuGame.prototype, {
             table: new Map()
         };
         // 连续冲四专用搜索能越过普通搜索的宽度和层数限制。
-        if (forcingDepth > 0 && timeLimit > 0 && candidates.some(move => move.attackScore >= 12000)) {
+        if (forcingDepth > 0 && timeLimit > 0 && candidates.some(move => move.attackScore >= (threatDepth > 0 ? 3000 : 12000))) {
             const forcingContext = {
                 deadline: Math.min(deadline, performance.now() + timeLimit * 0.25),
                 nodes: 0,
@@ -226,7 +226,7 @@ Object.assign(GomokuGame.prototype, {
                 timeout: {}
             };
             try {
-                const forced = this.findContinuousFour(aiPlayer, forcingDepth, forcingContext);
+                const forced = this.findForcingWin(aiPlayer, forcingDepth, threatDepth, forcingContext);
                 if (forced) return { x: forced.x, y: forced.y };
             } catch (error) {
                 if (error !== forcingContext.timeout) throw error;
@@ -235,14 +235,14 @@ Object.assign(GomokuGame.prototype, {
         // 发现对方连续冲四后，排除已证明会输的应手，再做常规搜索。
         let rootMoves = candidates.slice(0, rootWidth);
         if (forcingDepth > 0 && timeLimit > 0 && performance.now() < deadline
-            && candidates.some(move => move.defenseScore >= 12000)) {
+            && candidates.some(move => move.defenseScore >= (threatDepth > 0 ? 3000 : 12000))) {
             const defenseContext = {
                 deadline: Math.min(deadline, performance.now() + timeLimit * 0.25),
                 nodes: 0,
                 nodeLimit: Math.min(nodeLimit, 3000),
                 timeout: {}
             };
-            rootMoves = this.filterLosingDefenses(aiPlayer, rootMoves, forcingDepth, defenseContext);
+            rootMoves = this.filterLosingDefenses(aiPlayer, rootMoves, forcingDepth, defenseContext, threatDepth);
         }
         let bestMove = rootMoves[0];
         for (let depth = 2; depth <= maxDepth; depth++) {
@@ -278,11 +278,11 @@ Object.assign(GomokuGame.prototype, {
         return { x: bestMove.x, y: bestMove.y };
     },
 
-    filterLosingDefenses(player, rootMoves, forcingDepth, context) {
+    filterLosingDefenses(player, rootMoves, forcingDepth, context, threatDepth = 0) {
         const opponent = this.getOpponent(player);
         let threat;
         try {
-            threat = this.findContinuousFour(opponent, forcingDepth, context);
+            threat = this.findForcingWin(opponent, forcingDepth, threatDepth, context);
         } catch (error) {
             if (error !== context.timeout) throw error;
             return rootMoves;
@@ -304,7 +304,7 @@ Object.assign(GomokuGame.prototype, {
         for (const move of moves) {
             this.board[move.x][move.y] = player;
             try {
-                if (this.findContinuousFour(opponent, forcingDepth, context)) {
+                if (this.findForcingWin(opponent, forcingDepth, threatDepth, context)) {
                     losing.add(move);
                 }
             } catch (error) {
@@ -317,6 +317,144 @@ Object.assign(GomokuGame.prototype, {
         }
         const remaining = moves.filter(move => !losing.has(move));
         return remaining.length ? remaining : rootMoves;
+    },
+
+    // 先找冲四，再在剩余战术预算内搜索包含活三的分支胜法。
+    findForcingWin(attacker, fourDepth, threatDepth, context) {
+        if (threatDepth <= 0) return this.findContinuousFour(attacker, fourDepth, context);
+        const fourContext = {
+            ...context,
+            deadline: Math.min(context.deadline, performance.now() + Math.max(0, context.deadline - performance.now()) * 0.4),
+            nodeLimit: Math.max(1, Math.floor(context.nodeLimit * 0.4)),
+            nodes: 0,
+            timeout: {}
+        };
+        try {
+            const four = this.findContinuousFour(attacker, fourDepth, fourContext);
+            if (four) return four;
+        } catch (error) {
+            if (error !== fourContext.timeout) throw error;
+        } finally {
+            context.nodes += fourContext.nodes;
+        }
+        return this.findContinuousThreat(attacker, threatDepth, context);
+    },
+
+    // 精确枚举五格窗口：四子一空是成五点，三子两空给出所有冲四反击点。
+    getExactThreatWindows(player) {
+        const wins = new Map();
+        const fours = new Map();
+        for (let x = 0; x < this.boardSize; x++) {
+            for (let y = 0; y < this.boardSize; y++) {
+                for (const [dx, dy] of [[1, 0], [0, 1], [1, 1], [1, -1]]) {
+                    if (!this.isInsideBoard(x + dx * 4, y + dy * 4)) continue;
+                    let stones = 0;
+                    const empty = [];
+                    for (let step = 0; step < 5; step++) {
+                        const px = x + dx * step;
+                        const py = y + dy * step;
+                        const cell = this.board[px][py];
+                        if (cell === player) stones++;
+                        else if (cell === null) empty.push({ x: px, y: py });
+                        else { stones = -1; break; }
+                    }
+                    const target = stones === 4 ? wins : stones === 3 ? fours : null;
+                    if (target) for (const point of empty) target.set(`${point.x},${point.y}`, point);
+                }
+            }
+        }
+        return { wins: [...wins.values()], fours: [...fours.values()] };
+    },
+
+    getOpenFourContinuations(x, y, player) {
+        const continuations = [];
+        for (const [dx, dy] of [[1, 0], [0, 1], [1, 1], [1, -1]]) {
+            for (let offset = -4; offset <= 4; offset++) {
+                const px = x + dx * offset;
+                const py = y + dy * offset;
+                if (!this.isInsideBoard(px, py) || this.board[px][py] !== null) continue;
+                const wins = new Map();
+                this.board[px][py] = player;
+                try {
+                    for (let start = -4; start <= 0; start++) {
+                        if (!this.isInsideBoard(px + dx * start, py + dy * start)
+                            || !this.isInsideBoard(px + dx * (start + 4), py + dy * (start + 4))) continue;
+                        let stones = 0;
+                        let empty = null;
+                        for (let step = start; step < start + 5; step++) {
+                            const tx = px + dx * step;
+                            const ty = py + dy * step;
+                            const cell = this.board[tx][ty];
+                            if (cell === player) stones++;
+                            else if (cell === null) empty = { x: tx, y: ty };
+                            else { stones = -1; break; }
+                        }
+                        if (stones === 4 && empty) wins.set(`${empty.x},${empty.y}`, empty);
+                    }
+                } finally {
+                    this.board[px][py] = null;
+                }
+                if (wins.size >= 2) continuations.push({ x: px, y: py, winningCells: [...wins.values()] });
+            }
+        }
+        return continuations;
+    },
+
+    // 活三采用 AND/OR 搜索：进攻方找到一种胜法，防守方的每个有效应手都必须被破解。
+    findContinuousThreat(attacker, remainingAttacks, context, firstMove = null) {
+        this.checkSearchBudget(context);
+        const defender = this.getOpponent(attacker);
+        const moves = this.getSearchMoves(attacker);
+        if (!moves.length) return null;
+        if (moves[0].win) return { ...moves[0], forcingLine: [moves[0]] };
+        if (remainingAttacks <= 0) return null;
+        const attacks = firstMove
+            ? moves.filter(move => move.x === firstMove.x && move.y === firstMove.y)
+            : moves.filter(candidate => candidate.attackScore >= 3000).slice(0, 12);
+        for (const move of attacks) {
+            this.checkSearchBudget(context);
+            this.board[move.x][move.y] = attacker;
+            try {
+                const counter = this.getExactThreatWindows(defender);
+                if (counter.wins.length) continue;
+                const wins = this.getExactThreatWindows(attacker).wins;
+                if (wins.length >= 2) return { ...move, forcingLine: [move, ...wins] };
+                let replies;
+                let continuationCells = [];
+                if (wins.length === 1) {
+                    replies = wins;
+                } else {
+                    const continuations = this.getOpenFourContinuations(move.x, move.y, attacker);
+                    if (!continuations.length) continue;
+                    const groups = continuations.map(next => [next, ...next.winningCells]);
+                    // 不阻断任何活四延伸、又不能冲四反击的应手，下一手就会输。
+                    replies = groups[0].filter(point => groups.every(group => group.some(cell => cell.x === point.x && cell.y === point.y)));
+                    const distinct = new Map([...replies, ...counter.fours].map(point => [`${point.x},${point.y}`, point]));
+                    replies = [...distinct.values()];
+                    continuationCells = groups.flat();
+                }
+                let allDefensesLose = true;
+                const forcingLine = [move, ...continuationCells];
+                for (const reply of replies) {
+                    this.checkSearchBudget(context);
+                    this.board[reply.x][reply.y] = defender;
+                    try {
+                        const continuation = this.findContinuousThreat(attacker, remainingAttacks - 1, context);
+                        if (!continuation) { allDefensesLose = false; break; }
+                        forcingLine.push(reply, ...continuation.forcingLine);
+                    } finally {
+                        this.board[reply.x][reply.y] = null;
+                    }
+                }
+                if (allDefensesLose) {
+                    const distinct = new Map(forcingLine.map(point => [`${point.x},${point.y}`, { x: point.x, y: point.y }]));
+                    return { ...move, forcingLine: [...distinct.values()] };
+                }
+            } finally {
+                this.board[move.x][move.y] = null;
+            }
+        }
+        return null;
     },
 
     // 只返回已证明的冲四必胜线；找不到或预算不足不代表不存在胜法。
