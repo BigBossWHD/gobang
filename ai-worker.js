@@ -1,6 +1,6 @@
 // 后台线程只计算棋步，不创建界面，也不接收 API 密钥。
 self.window = self;
-importScripts('script.js?v=20261008-8', 'ai.js?v=20261008-8');
+importScripts('script.js?v=20261008-9', 'ai.js?v=20261008-9');
 self.onmessage = event => {
     const { board, moveHistory, aiPlayer } = event.data;
     const game = Object.create(GomokuGame.prototype);

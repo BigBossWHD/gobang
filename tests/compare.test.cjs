@@ -11,6 +11,12 @@ test('比较工具拒绝非法预算，固定版本与运行选项明确', () =>
     assert.throws(() => parseArgs(['--rounds', 'NaN']));
     assert.throws(() => parseArgs(['--baseline']));
     assert.throws(() => parseArgs(['--unrecognized']));
+    assert.throws(() => parseArgs(['--candidate-time-ms', '-1']));
+    assert.throws(() => parseArgs(['--candidate-node-limit', '0']));
+    const budgets = parseArgs(['--time-ms', '1200', '--node-limit', '12000', '--candidate-time-ms', '2000', '--candidate-node-limit', '20000']);
+    assert.equal(budgets.candidateTimeMs, 2000);
+    assert.equal(budgets.candidateNodeLimit, 20000);
+    assert.equal(parseArgs(['--time-ms', '123']).candidateTimeMs, 123);
     assert.equal(parseArgs([]).baseline, '8a4f590');
 });
 

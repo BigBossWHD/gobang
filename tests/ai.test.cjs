@@ -102,7 +102,7 @@ test('搜索预算耗尽仍返回合法棋步且恢复棋盘', () => {
     const move = game.getHardMove('white');
     assert.equal(JSON.stringify(game.board), before);
     assert.equal(game.board[move.x][move.y], null);
-    assert.ok(performance.now() - started < 2000);
+    assert.ok(performance.now() - started < 3000);
 });
 
 test('空棋盘悔棋不会取消 AI 的首次行棋', () => {

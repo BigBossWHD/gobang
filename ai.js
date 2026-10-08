@@ -176,7 +176,7 @@ Object.assign(GomokuGame.prototype, {
         return new Promise(resolve => {
             let worker;
             try {
-                worker = new Worker('ai-worker.js?v=20261008-8');
+                worker = new Worker('ai-worker.js?v=20261008-9');
             } catch {
                 resolve(this.getHardMove(aiPlayer));
                 return;
@@ -202,7 +202,7 @@ Object.assign(GomokuGame.prototype, {
     },
 
     getSearchedMove(aiPlayer, options = {}) {
-        const { maxDepth = 6, timeLimit = 1200, rootWidth = 16, nodeLimit = 12000, forcingDepth = 6, threatDepth = 3 } = options;
+        const { maxDepth = 6, timeLimit = 2000, rootWidth = 16, nodeLimit = 20000, forcingDepth = 6, threatDepth = 3 } = options;
         const deadline = performance.now() + timeLimit;
         const candidates = this.getSearchMoves(aiPlayer);
         if (candidates.length === 0) return null;

@@ -1,0 +1,1675 @@
+{
+    "schemaVersion": 1,
+    "options": {
+        "baseline": "8a4f590",
+        "candidate": "9a75978a0624d2fce15f1b1a67505926837eb601",
+        "timeMs": 1200,
+        "nodeLimit": 12000,
+        "maxMoves": 100,
+        "rounds": 1,
+        "seed": 20261008,
+        "deterministic": false,
+        "output": null
+    },
+    "engines": {
+        "baseline": "8a4f59098b8ea8a405cdef4e43debfc64c1a3958",
+        "candidate": "9a75978a0624d2fce15f1b1a67505926837eb601"
+    },
+    "candidateSourceSha256": "ace8c23e858619d9ee44f507321ad9248b4d840e7fb3cab8d0bfe275e311f6f3",
+    "nodeVersion": "v26.10.0",
+    "platform": "darwin/arm64",
+    "matches": [
+        {
+            "opening": "相邻直线",
+            "round": 0,
+            "seed": 20261008,
+            "candidateColor": "black",
+            "outcome": "win",
+            "winner": "baseline",
+            "plies": 58,
+            "moves": [
+                {
+                    "x": 7,
+                    "y": 7,
+                    "player": "black"
+                },
+                {
+                    "x": 7,
+                    "y": 8,
+                    "player": "white"
+                },
+                {
+                    "x": 7,
+                    "y": 9,
+                    "player": "black"
+                },
+                {
+                    "x": 5,
+                    "y": 6,
+                    "player": "white"
+                },
+                {
+                    "x": 8,
+                    "y": 9,
+                    "player": "black"
+                },
+                {
+                    "x": 6,
+                    "y": 9,
+                    "player": "white"
+                },
+                {
+                    "x": 8,
+                    "y": 7,
+                    "player": "black"
+                },
+                {
+                    "x": 6,
+                    "y": 7,
+                    "player": "white"
+                },
+                {
+                    "x": 8,
+                    "y": 8,
+                    "player": "black"
+                },
+                {
+                    "x": 8,
+                    "y": 6,
+                    "player": "white"
+                },
+                {
+                    "x": 6,
+                    "y": 6,
+                    "player": "black"
+                },
+                {
+                    "x": 9,
+                    "y": 9,
+                    "player": "white"
+                },
+                {
+                    "x": 8,
+                    "y": 10,
+                    "player": "black"
+                },
+                {
+                    "x": 8,
+                    "y": 11,
+                    "player": "white"
+                },
+                {
+                    "x": 6,
+                    "y": 10,
+                    "player": "black"
+                },
+                {
+                    "x": 9,
+                    "y": 7,
+                    "player": "white"
+                },
+                {
+                    "x": 4,
+                    "y": 12,
+                    "player": "black"
+                },
+                {
+                    "x": 5,
+                    "y": 11,
+                    "player": "white"
+                },
+                {
+                    "x": 7,
+                    "y": 10,
+                    "player": "black"
+                },
+                {
+                    "x": 5,
+                    "y": 10,
+                    "player": "white"
+                },
+                {
+                    "x": 9,
+                    "y": 10,
+                    "player": "black"
+                },
+                {
+                    "x": 10,
+                    "y": 10,
+                    "player": "white"
+                },
+                {
+                    "x": 4,
+                    "y": 4,
+                    "player": "black"
+                },
+                {
+                    "x": 5,
+                    "y": 5,
+                    "player": "white"
+                },
+                {
+                    "x": 5,
+                    "y": 7,
+                    "player": "black"
+                },
+                {
+                    "x": 4,
+                    "y": 5,
+                    "player": "white"
+                },
+                {
+                    "x": 3,
+                    "y": 4,
+                    "player": "black"
+                },
+                {
+                    "x": 4,
+                    "y": 11,
+                    "player": "white"
+                },
+                {
+                    "x": 3,
+                    "y": 12,
+                    "player": "black"
+                },
+                {
+                    "x": 6,
+                    "y": 8,
+                    "player": "white"
+                },
+                {
+                    "x": 5,
+                    "y": 4,
+                    "player": "black"
+                },
+                {
+                    "x": 6,
+                    "y": 4,
+                    "player": "white"
+                },
+                {
+                    "x": 1,
+                    "y": 4,
+                    "player": "black"
+                },
+                {
+                    "x": 2,
+                    "y": 4,
+                    "player": "white"
+                },
+                {
+                    "x": 7,
+                    "y": 5,
+                    "player": "black"
+                },
+                {
+                    "x": 6,
+                    "y": 11,
+                    "player": "white"
+                },
+                {
+                    "x": 7,
+                    "y": 11,
+                    "player": "black"
+                },
+                {
+                    "x": 4,
+                    "y": 8,
+                    "player": "white"
+                },
+                {
+                    "x": 9,
+                    "y": 3,
+                    "player": "black"
+                },
+                {
+                    "x": 8,
+                    "y": 4,
+                    "player": "white"
+                },
+                {
+                    "x": 7,
+                    "y": 12,
+                    "player": "black"
+                },
+                {
+                    "x": 7,
+                    "y": 13,
+                    "player": "white"
+                },
+                {
+                    "x": 5,
+                    "y": 12,
+                    "player": "black"
+                },
+                {
+                    "x": 6,
+                    "y": 12,
+                    "player": "white"
+                },
+                {
+                    "x": 2,
+                    "y": 12,
+                    "player": "black"
+                },
+                {
+                    "x": 1,
+                    "y": 12,
+                    "player": "white"
+                },
+                {
+                    "x": 4,
+                    "y": 10,
+                    "player": "black"
+                },
+                {
+                    "x": 3,
+                    "y": 11,
+                    "player": "white"
+                },
+                {
+                    "x": 2,
+                    "y": 11,
+                    "player": "black"
+                },
+                {
+                    "x": 3,
+                    "y": 8,
+                    "player": "white"
+                },
+                {
+                    "x": 5,
+                    "y": 8,
+                    "player": "black"
+                },
+                {
+                    "x": 4,
+                    "y": 9,
+                    "player": "white"
+                },
+                {
+                    "x": 2,
+                    "y": 7,
+                    "player": "black"
+                },
+                {
+                    "x": 4,
+                    "y": 7,
+                    "player": "white"
+                },
+                {
+                    "x": 4,
+                    "y": 6,
+                    "player": "black"
+                },
+                {
+                    "x": 2,
+                    "y": 9,
+                    "player": "white"
+                },
+                {
+                    "x": 1,
+                    "y": 10,
+                    "player": "black"
+                },
+                {
+                    "x": 6,
+                    "y": 5,
+                    "player": "white"
+                }
+            ]
+        },
+        {
+            "opening": "相邻直线",
+            "round": 0,
+            "seed": 20261008,
+            "candidateColor": "white",
+            "outcome": "win",
+            "winner": "candidate",
+            "plies": 34,
+            "moves": [
+                {
+                    "x": 7,
+                    "y": 7,
+                    "player": "black"
+                },
+                {
+                    "x": 7,
+                    "y": 8,
+                    "player": "white"
+                },
+                {
+                    "x": 7,
+                    "y": 9,
+                    "player": "black"
+                },
+                {
+                    "x": 5,
+                    "y": 6,
+                    "player": "white"
+                },
+                {
+                    "x": 8,
+                    "y": 9,
+                    "player": "black"
+                },
+                {
+                    "x": 6,
+                    "y": 9,
+                    "player": "white"
+                },
+                {
+                    "x": 8,
+                    "y": 7,
+                    "player": "black"
+                },
+                {
+                    "x": 6,
+                    "y": 7,
+                    "player": "white"
+                },
+                {
+                    "x": 8,
+                    "y": 8,
+                    "player": "black"
+                },
+                {
+                    "x": 8,
+                    "y": 10,
+                    "player": "white"
+                },
+                {
+                    "x": 3,
+                    "y": 4,
+                    "player": "black"
+                },
+                {
+                    "x": 6,
+                    "y": 10,
+                    "player": "white"
+                },
+                {
+                    "x": 6,
+                    "y": 8,
+                    "player": "black"
+                },
+                {
+                    "x": 5,
+                    "y": 9,
+                    "player": "white"
+                },
+                {
+                    "x": 9,
+                    "y": 9,
+                    "player": "black"
+                },
+                {
+                    "x": 10,
+                    "y": 10,
+                    "player": "white"
+                },
+                {
+                    "x": 5,
+                    "y": 5,
+                    "player": "black"
+                },
+                {
+                    "x": 6,
+                    "y": 6,
+                    "player": "white"
+                },
+                {
+                    "x": 8,
+                    "y": 6,
+                    "player": "black"
+                },
+                {
+                    "x": 8,
+                    "y": 5,
+                    "player": "white"
+                },
+                {
+                    "x": 11,
+                    "y": 9,
+                    "player": "black"
+                },
+                {
+                    "x": 10,
+                    "y": 9,
+                    "player": "white"
+                },
+                {
+                    "x": 9,
+                    "y": 5,
+                    "player": "black"
+                },
+                {
+                    "x": 10,
+                    "y": 4,
+                    "player": "white"
+                },
+                {
+                    "x": 10,
+                    "y": 7,
+                    "player": "black"
+                },
+                {
+                    "x": 7,
+                    "y": 10,
+                    "player": "white"
+                },
+                {
+                    "x": 9,
+                    "y": 10,
+                    "player": "black"
+                },
+                {
+                    "x": 5,
+                    "y": 10,
+                    "player": "white"
+                },
+                {
+                    "x": 4,
+                    "y": 10,
+                    "player": "black"
+                },
+                {
+                    "x": 5,
+                    "y": 8,
+                    "player": "white"
+                },
+                {
+                    "x": 5,
+                    "y": 7,
+                    "player": "black"
+                },
+                {
+                    "x": 7,
+                    "y": 6,
+                    "player": "white"
+                },
+                {
+                    "x": 9,
+                    "y": 4,
+                    "player": "black"
+                },
+                {
+                    "x": 4,
+                    "y": 9,
+                    "player": "white"
+                }
+            ]
+        },
+        {
+            "opening": "相邻斜线",
+            "round": 0,
+            "seed": 20261009,
+            "candidateColor": "black",
+            "outcome": "win",
+            "winner": "baseline",
+            "plies": 38,
+            "moves": [
+                {
+                    "x": 7,
+                    "y": 7,
+                    "player": "black"
+                },
+                {
+                    "x": 6,
+                    "y": 6,
+                    "player": "white"
+                },
+                {
+                    "x": 5,
+                    "y": 7,
+                    "player": "black"
+                },
+                {
+                    "x": 4,
+                    "y": 6,
+                    "player": "white"
+                },
+                {
+                    "x": 5,
+                    "y": 6,
+                    "player": "black"
+                },
+                {
+                    "x": 4,
+                    "y": 7,
+                    "player": "white"
+                },
+                {
+                    "x": 5,
+                    "y": 8,
+                    "player": "black"
+                },
+                {
+                    "x": 5,
+                    "y": 5,
+                    "player": "white"
+                },
+                {
+                    "x": 5,
+                    "y": 9,
+                    "player": "black"
+                },
+                {
+                    "x": 5,
+                    "y": 10,
+                    "player": "white"
+                },
+                {
+                    "x": 6,
+                    "y": 8,
+                    "player": "black"
+                },
+                {
+                    "x": 4,
+                    "y": 10,
+                    "player": "white"
+                },
+                {
+                    "x": 4,
+                    "y": 8,
+                    "player": "black"
+                },
+                {
+                    "x": 7,
+                    "y": 8,
+                    "player": "white"
+                },
+                {
+                    "x": 2,
+                    "y": 8,
+                    "player": "black"
+                },
+                {
+                    "x": 3,
+                    "y": 8,
+                    "player": "white"
+                },
+                {
+                    "x": 8,
+                    "y": 6,
+                    "player": "black"
+                },
+                {
+                    "x": 9,
+                    "y": 5,
+                    "player": "white"
+                },
+                {
+                    "x": 6,
+                    "y": 10,
+                    "player": "black"
+                },
+                {
+                    "x": 3,
+                    "y": 7,
+                    "player": "white"
+                },
+                {
+                    "x": 6,
+                    "y": 9,
+                    "player": "black"
+                },
+                {
+                    "x": 6,
+                    "y": 4,
+                    "player": "white"
+                },
+                {
+                    "x": 7,
+                    "y": 3,
+                    "player": "black"
+                },
+                {
+                    "x": 6,
+                    "y": 7,
+                    "player": "white"
+                },
+                {
+                    "x": 6,
+                    "y": 11,
+                    "player": "black"
+                },
+                {
+                    "x": 6,
+                    "y": 12,
+                    "player": "white"
+                },
+                {
+                    "x": 7,
+                    "y": 11,
+                    "player": "black"
+                },
+                {
+                    "x": 8,
+                    "y": 12,
+                    "player": "white"
+                },
+                {
+                    "x": 7,
+                    "y": 9,
+                    "player": "black"
+                },
+                {
+                    "x": 6,
+                    "y": 5,
+                    "player": "white"
+                },
+                {
+                    "x": 6,
+                    "y": 3,
+                    "player": "black"
+                },
+                {
+                    "x": 7,
+                    "y": 5,
+                    "player": "white"
+                },
+                {
+                    "x": 8,
+                    "y": 5,
+                    "player": "black"
+                },
+                {
+                    "x": 3,
+                    "y": 5,
+                    "player": "white"
+                },
+                {
+                    "x": 4,
+                    "y": 5,
+                    "player": "black"
+                },
+                {
+                    "x": 3,
+                    "y": 6,
+                    "player": "white"
+                },
+                {
+                    "x": 3,
+                    "y": 9,
+                    "player": "black"
+                },
+                {
+                    "x": 3,
+                    "y": 4,
+                    "player": "white"
+                }
+            ]
+        },
+        {
+            "opening": "相邻斜线",
+            "round": 0,
+            "seed": 20261009,
+            "candidateColor": "white",
+            "outcome": "win",
+            "winner": "candidate",
+            "plies": 56,
+            "moves": [
+                {
+                    "x": 7,
+                    "y": 7,
+                    "player": "black"
+                },
+                {
+                    "x": 6,
+                    "y": 6,
+                    "player": "white"
+                },
+                {
+                    "x": 5,
+                    "y": 7,
+                    "player": "black"
+                },
+                {
+                    "x": 4,
+                    "y": 6,
+                    "player": "white"
+                },
+                {
+                    "x": 5,
+                    "y": 6,
+                    "player": "black"
+                },
+                {
+                    "x": 4,
+                    "y": 7,
+                    "player": "white"
+                },
+                {
+                    "x": 5,
+                    "y": 8,
+                    "player": "black"
+                },
+                {
+                    "x": 5,
+                    "y": 5,
+                    "player": "white"
+                },
+                {
+                    "x": 5,
+                    "y": 9,
+                    "player": "black"
+                },
+                {
+                    "x": 5,
+                    "y": 10,
+                    "player": "white"
+                },
+                {
+                    "x": 6,
+                    "y": 8,
+                    "player": "black"
+                },
+                {
+                    "x": 4,
+                    "y": 10,
+                    "player": "white"
+                },
+                {
+                    "x": 4,
+                    "y": 8,
+                    "player": "black"
+                },
+                {
+                    "x": 7,
+                    "y": 8,
+                    "player": "white"
+                },
+                {
+                    "x": 2,
+                    "y": 8,
+                    "player": "black"
+                },
+                {
+                    "x": 3,
+                    "y": 8,
+                    "player": "white"
+                },
+                {
+                    "x": 8,
+                    "y": 6,
+                    "player": "black"
+                },
+                {
+                    "x": 9,
+                    "y": 5,
+                    "player": "white"
+                },
+                {
+                    "x": 6,
+                    "y": 10,
+                    "player": "black"
+                },
+                {
+                    "x": 3,
+                    "y": 7,
+                    "player": "white"
+                },
+                {
+                    "x": 6,
+                    "y": 9,
+                    "player": "black"
+                },
+                {
+                    "x": 6,
+                    "y": 11,
+                    "player": "white"
+                },
+                {
+                    "x": 4,
+                    "y": 9,
+                    "player": "black"
+                },
+                {
+                    "x": 6,
+                    "y": 4,
+                    "player": "white"
+                },
+                {
+                    "x": 7,
+                    "y": 3,
+                    "player": "black"
+                },
+                {
+                    "x": 3,
+                    "y": 9,
+                    "player": "white"
+                },
+                {
+                    "x": 7,
+                    "y": 9,
+                    "player": "black"
+                },
+                {
+                    "x": 8,
+                    "y": 9,
+                    "player": "white"
+                },
+                {
+                    "x": 8,
+                    "y": 12,
+                    "player": "black"
+                },
+                {
+                    "x": 7,
+                    "y": 11,
+                    "player": "white"
+                },
+                {
+                    "x": 3,
+                    "y": 10,
+                    "player": "black"
+                },
+                {
+                    "x": 3,
+                    "y": 5,
+                    "player": "white"
+                },
+                {
+                    "x": 3,
+                    "y": 6,
+                    "player": "black"
+                },
+                {
+                    "x": 6,
+                    "y": 7,
+                    "player": "white"
+                },
+                {
+                    "x": 1,
+                    "y": 12,
+                    "player": "black"
+                },
+                {
+                    "x": 2,
+                    "y": 11,
+                    "player": "white"
+                },
+                {
+                    "x": 9,
+                    "y": 11,
+                    "player": "black"
+                },
+                {
+                    "x": 8,
+                    "y": 10,
+                    "player": "white"
+                },
+                {
+                    "x": 7,
+                    "y": 5,
+                    "player": "black"
+                },
+                {
+                    "x": 6,
+                    "y": 5,
+                    "player": "white"
+                },
+                {
+                    "x": 6,
+                    "y": 3,
+                    "player": "black"
+                },
+                {
+                    "x": 10,
+                    "y": 11,
+                    "player": "white"
+                },
+                {
+                    "x": 9,
+                    "y": 10,
+                    "player": "black"
+                },
+                {
+                    "x": 4,
+                    "y": 5,
+                    "player": "white"
+                },
+                {
+                    "x": 2,
+                    "y": 5,
+                    "player": "black"
+                },
+                {
+                    "x": 4,
+                    "y": 3,
+                    "player": "white"
+                },
+                {
+                    "x": 4,
+                    "y": 4,
+                    "player": "black"
+                },
+                {
+                    "x": 7,
+                    "y": 6,
+                    "player": "white"
+                },
+                {
+                    "x": 5,
+                    "y": 4,
+                    "player": "black"
+                },
+                {
+                    "x": 5,
+                    "y": 11,
+                    "player": "white"
+                },
+                {
+                    "x": 8,
+                    "y": 11,
+                    "player": "black"
+                },
+                {
+                    "x": 6,
+                    "y": 12,
+                    "player": "white"
+                },
+                {
+                    "x": 7,
+                    "y": 13,
+                    "player": "black"
+                },
+                {
+                    "x": 9,
+                    "y": 9,
+                    "player": "white"
+                },
+                {
+                    "x": 5,
+                    "y": 13,
+                    "player": "black"
+                },
+                {
+                    "x": 10,
+                    "y": 8,
+                    "player": "white"
+                }
+            ]
+        },
+        {
+            "opening": "偏离中心",
+            "round": 0,
+            "seed": 20261010,
+            "candidateColor": "black",
+            "outcome": "win",
+            "winner": "baseline",
+            "plies": 40,
+            "moves": [
+                {
+                    "x": 5,
+                    "y": 6,
+                    "player": "black"
+                },
+                {
+                    "x": 6,
+                    "y": 6,
+                    "player": "white"
+                },
+                {
+                    "x": 6,
+                    "y": 5,
+                    "player": "black"
+                },
+                {
+                    "x": 5,
+                    "y": 5,
+                    "player": "white"
+                },
+                {
+                    "x": 7,
+                    "y": 7,
+                    "player": "black"
+                },
+                {
+                    "x": 4,
+                    "y": 4,
+                    "player": "white"
+                },
+                {
+                    "x": 2,
+                    "y": 2,
+                    "player": "black"
+                },
+                {
+                    "x": 4,
+                    "y": 7,
+                    "player": "white"
+                },
+                {
+                    "x": 7,
+                    "y": 4,
+                    "player": "black"
+                },
+                {
+                    "x": 7,
+                    "y": 5,
+                    "player": "white"
+                },
+                {
+                    "x": 4,
+                    "y": 5,
+                    "player": "black"
+                },
+                {
+                    "x": 5,
+                    "y": 7,
+                    "player": "white"
+                },
+                {
+                    "x": 4,
+                    "y": 8,
+                    "player": "black"
+                },
+                {
+                    "x": 6,
+                    "y": 4,
+                    "player": "white"
+                },
+                {
+                    "x": 6,
+                    "y": 7,
+                    "player": "black"
+                },
+                {
+                    "x": 3,
+                    "y": 4,
+                    "player": "white"
+                },
+                {
+                    "x": 8,
+                    "y": 9,
+                    "player": "black"
+                },
+                {
+                    "x": 7,
+                    "y": 8,
+                    "player": "white"
+                },
+                {
+                    "x": 5,
+                    "y": 4,
+                    "player": "black"
+                },
+                {
+                    "x": 3,
+                    "y": 6,
+                    "player": "white"
+                },
+                {
+                    "x": 3,
+                    "y": 7,
+                    "player": "black"
+                },
+                {
+                    "x": 4,
+                    "y": 3,
+                    "player": "white"
+                },
+                {
+                    "x": 9,
+                    "y": 2,
+                    "player": "black"
+                },
+                {
+                    "x": 8,
+                    "y": 3,
+                    "player": "white"
+                },
+                {
+                    "x": 2,
+                    "y": 6,
+                    "player": "black"
+                },
+                {
+                    "x": 5,
+                    "y": 9,
+                    "player": "white"
+                },
+                {
+                    "x": 1,
+                    "y": 5,
+                    "player": "black"
+                },
+                {
+                    "x": 0,
+                    "y": 4,
+                    "player": "white"
+                },
+                {
+                    "x": 2,
+                    "y": 5,
+                    "player": "black"
+                },
+                {
+                    "x": 5,
+                    "y": 3,
+                    "player": "white"
+                },
+                {
+                    "x": 3,
+                    "y": 5,
+                    "player": "black"
+                },
+                {
+                    "x": 0,
+                    "y": 5,
+                    "player": "white"
+                },
+                {
+                    "x": 2,
+                    "y": 4,
+                    "player": "black"
+                },
+                {
+                    "x": 2,
+                    "y": 3,
+                    "player": "white"
+                },
+                {
+                    "x": 2,
+                    "y": 8,
+                    "player": "black"
+                },
+                {
+                    "x": 2,
+                    "y": 7,
+                    "player": "white"
+                },
+                {
+                    "x": 3,
+                    "y": 3,
+                    "player": "black"
+                },
+                {
+                    "x": 4,
+                    "y": 2,
+                    "player": "white"
+                },
+                {
+                    "x": 3,
+                    "y": 1,
+                    "player": "black"
+                },
+                {
+                    "x": 8,
+                    "y": 6,
+                    "player": "white"
+                }
+            ]
+        },
+        {
+            "opening": "偏离中心",
+            "round": 0,
+            "seed": 20261010,
+            "candidateColor": "white",
+            "outcome": "win",
+            "winner": "candidate",
+            "plies": 46,
+            "moves": [
+                {
+                    "x": 5,
+                    "y": 6,
+                    "player": "black"
+                },
+                {
+                    "x": 6,
+                    "y": 6,
+                    "player": "white"
+                },
+                {
+                    "x": 6,
+                    "y": 5,
+                    "player": "black"
+                },
+                {
+                    "x": 5,
+                    "y": 5,
+                    "player": "white"
+                },
+                {
+                    "x": 7,
+                    "y": 7,
+                    "player": "black"
+                },
+                {
+                    "x": 4,
+                    "y": 4,
+                    "player": "white"
+                },
+                {
+                    "x": 2,
+                    "y": 2,
+                    "player": "black"
+                },
+                {
+                    "x": 4,
+                    "y": 7,
+                    "player": "white"
+                },
+                {
+                    "x": 7,
+                    "y": 4,
+                    "player": "black"
+                },
+                {
+                    "x": 7,
+                    "y": 5,
+                    "player": "white"
+                },
+                {
+                    "x": 4,
+                    "y": 5,
+                    "player": "black"
+                },
+                {
+                    "x": 5,
+                    "y": 7,
+                    "player": "white"
+                },
+                {
+                    "x": 4,
+                    "y": 8,
+                    "player": "black"
+                },
+                {
+                    "x": 6,
+                    "y": 4,
+                    "player": "white"
+                },
+                {
+                    "x": 6,
+                    "y": 7,
+                    "player": "black"
+                },
+                {
+                    "x": 3,
+                    "y": 4,
+                    "player": "white"
+                },
+                {
+                    "x": 8,
+                    "y": 9,
+                    "player": "black"
+                },
+                {
+                    "x": 7,
+                    "y": 8,
+                    "player": "white"
+                },
+                {
+                    "x": 5,
+                    "y": 4,
+                    "player": "black"
+                },
+                {
+                    "x": 3,
+                    "y": 6,
+                    "player": "white"
+                },
+                {
+                    "x": 3,
+                    "y": 7,
+                    "player": "black"
+                },
+                {
+                    "x": 4,
+                    "y": 3,
+                    "player": "white"
+                },
+                {
+                    "x": 5,
+                    "y": 2,
+                    "player": "black"
+                },
+                {
+                    "x": 8,
+                    "y": 3,
+                    "player": "white"
+                },
+                {
+                    "x": 2,
+                    "y": 6,
+                    "player": "black"
+                },
+                {
+                    "x": 5,
+                    "y": 9,
+                    "player": "white"
+                },
+                {
+                    "x": 4,
+                    "y": 2,
+                    "player": "black"
+                },
+                {
+                    "x": 3,
+                    "y": 2,
+                    "player": "white"
+                },
+                {
+                    "x": 1,
+                    "y": 5,
+                    "player": "black"
+                },
+                {
+                    "x": 0,
+                    "y": 4,
+                    "player": "white"
+                },
+                {
+                    "x": 2,
+                    "y": 4,
+                    "player": "black"
+                },
+                {
+                    "x": 3,
+                    "y": 3,
+                    "player": "white"
+                },
+                {
+                    "x": 3,
+                    "y": 5,
+                    "player": "black"
+                },
+                {
+                    "x": 2,
+                    "y": 5,
+                    "player": "white"
+                },
+                {
+                    "x": 1,
+                    "y": 4,
+                    "player": "black"
+                },
+                {
+                    "x": 1,
+                    "y": 6,
+                    "player": "white"
+                },
+                {
+                    "x": 0,
+                    "y": 7,
+                    "player": "black"
+                },
+                {
+                    "x": 6,
+                    "y": 9,
+                    "player": "white"
+                },
+                {
+                    "x": 5,
+                    "y": 8,
+                    "player": "black"
+                },
+                {
+                    "x": 9,
+                    "y": 3,
+                    "player": "white"
+                },
+                {
+                    "x": 8,
+                    "y": 4,
+                    "player": "black"
+                },
+                {
+                    "x": 7,
+                    "y": 3,
+                    "player": "white"
+                },
+                {
+                    "x": 6,
+                    "y": 3,
+                    "player": "black"
+                },
+                {
+                    "x": 8,
+                    "y": 2,
+                    "player": "white"
+                },
+                {
+                    "x": 4,
+                    "y": 6,
+                    "player": "black"
+                },
+                {
+                    "x": 9,
+                    "y": 1,
+                    "player": "white"
+                }
+            ]
+        },
+        {
+            "opening": "分散布局",
+            "round": 0,
+            "seed": 20261011,
+            "candidateColor": "black",
+            "outcome": "win",
+            "winner": "baseline",
+            "plies": 18,
+            "moves": [
+                {
+                    "x": 7,
+                    "y": 7,
+                    "player": "black"
+                },
+                {
+                    "x": 5,
+                    "y": 5,
+                    "player": "white"
+                },
+                {
+                    "x": 8,
+                    "y": 6,
+                    "player": "black"
+                },
+                {
+                    "x": 6,
+                    "y": 8,
+                    "player": "white"
+                },
+                {
+                    "x": 9,
+                    "y": 5,
+                    "player": "black"
+                },
+                {
+                    "x": 6,
+                    "y": 7,
+                    "player": "white"
+                },
+                {
+                    "x": 6,
+                    "y": 5,
+                    "player": "black"
+                },
+                {
+                    "x": 7,
+                    "y": 8,
+                    "player": "white"
+                },
+                {
+                    "x": 9,
+                    "y": 6,
+                    "player": "black"
+                },
+                {
+                    "x": 5,
+                    "y": 8,
+                    "player": "white"
+                },
+                {
+                    "x": 8,
+                    "y": 8,
+                    "player": "black"
+                },
+                {
+                    "x": 5,
+                    "y": 6,
+                    "player": "white"
+                },
+                {
+                    "x": 11,
+                    "y": 3,
+                    "player": "black"
+                },
+                {
+                    "x": 10,
+                    "y": 4,
+                    "player": "white"
+                },
+                {
+                    "x": 8,
+                    "y": 9,
+                    "player": "black"
+                },
+                {
+                    "x": 5,
+                    "y": 7,
+                    "player": "white"
+                },
+                {
+                    "x": 5,
+                    "y": 4,
+                    "player": "black"
+                },
+                {
+                    "x": 5,
+                    "y": 9,
+                    "player": "white"
+                }
+            ]
+        },
+        {
+            "opening": "分散布局",
+            "round": 0,
+            "seed": 20261011,
+            "candidateColor": "white",
+            "outcome": "win",
+            "winner": "candidate",
+            "plies": 18,
+            "moves": [
+                {
+                    "x": 7,
+                    "y": 7,
+                    "player": "black"
+                },
+                {
+                    "x": 5,
+                    "y": 5,
+                    "player": "white"
+                },
+                {
+                    "x": 8,
+                    "y": 6,
+                    "player": "black"
+                },
+                {
+                    "x": 6,
+                    "y": 8,
+                    "player": "white"
+                },
+                {
+                    "x": 9,
+                    "y": 5,
+                    "player": "black"
+                },
+                {
+                    "x": 6,
+                    "y": 7,
+                    "player": "white"
+                },
+                {
+                    "x": 6,
+                    "y": 5,
+                    "player": "black"
+                },
+                {
+                    "x": 7,
+                    "y": 8,
+                    "player": "white"
+                },
+                {
+                    "x": 9,
+                    "y": 6,
+                    "player": "black"
+                },
+                {
+                    "x": 5,
+                    "y": 8,
+                    "player": "white"
+                },
+                {
+                    "x": 8,
+                    "y": 8,
+                    "player": "black"
+                },
+                {
+                    "x": 5,
+                    "y": 6,
+                    "player": "white"
+                },
+                {
+                    "x": 11,
+                    "y": 3,
+                    "player": "black"
+                },
+                {
+                    "x": 10,
+                    "y": 4,
+                    "player": "white"
+                },
+                {
+                    "x": 8,
+                    "y": 9,
+                    "player": "black"
+                },
+                {
+                    "x": 5,
+                    "y": 7,
+                    "player": "white"
+                },
+                {
+                    "x": 5,
+                    "y": 4,
+                    "player": "black"
+                },
+                {
+                    "x": 5,
+                    "y": 9,
+                    "player": "white"
+                }
+            ]
+        }
+    ],
+    "summary": {
+        "games": 8,
+        "candidateWins": 4,
+        "baselineWins": 4,
+        "draws": 0,
+        "capped": 0,
+        "candidateWinRateAllGames": 0.5,
+        "timingsMs": {
+            "baseline": {
+                "moves": 144,
+                "total": 83742.33,
+                "median": 758.15,
+                "p95": 1200.18,
+                "max": 1200.24
+            },
+            "candidate": {
+                "moves": 144,
+                "total": 95570.2,
+                "median": 856.57,
+                "p95": 1200.21,
+                "max": 1200.41
+            }
+        }
+    }
+}

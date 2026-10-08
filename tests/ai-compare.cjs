@@ -1,12 +1,12 @@
-// 新旧引擎使用同样的开局、时间预算和候选宽度；每个开局交换执棋颜色。
+// 新旧引擎使用同样的开局和候选宽度，支持分别设置时间与节点预算；每个开局交换执棋颜色。
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { loadEngine, createPosition } = require('./helpers/ai-harness.cjs');
 const { hasFive } = require('./helpers/rules.cjs');
 function parseArgs(args) {
-    const options = { baseline: '8a4f590', candidate: 'working', timeMs: 250, nodeLimit: 4000, maxMoves: 100, rounds: 1, seed: 20261008, deterministic: false, output: null };
-    const numeric = { '--time-ms': 'timeMs', '--node-limit': 'nodeLimit', '--max-moves': 'maxMoves', '--rounds': 'rounds', '--seed': 'seed' };
+    const options = { baseline: '8a4f590', candidate: 'working', timeMs: 250, nodeLimit: 4000, candidateTimeMs: null, candidateNodeLimit: null, maxMoves: 100, rounds: 1, seed: 20261008, deterministic: false, output: null };
+    const numeric = { '--candidate-time-ms': 'candidateTimeMs', '--candidate-node-limit': 'candidateNodeLimit', '--time-ms': 'timeMs', '--node-limit': 'nodeLimit', '--max-moves': 'maxMoves', '--rounds': 'rounds', '--seed': 'seed' };
     for (let i = 0; i < args.length; i++) {
         const arg = args[i];
         if (arg === '--deterministic') options.deterministic = true;
@@ -14,10 +14,12 @@ function parseArgs(args) {
         else if (['--baseline', '--candidate', '--output'].includes(arg)) options[arg.slice(2)] = args[++i];
         else throw new Error(`未知选项：${arg}`);
     }
-    for (const name of ['timeMs', 'nodeLimit', 'maxMoves', 'rounds', 'seed']) {
-        if (!Number.isInteger(options[name]) || options[name] < (['timeMs', 'seed'].includes(name) ? 0 : 1)) throw new Error(`无效参数：${name}`);
+    options.candidateTimeMs ??= options.timeMs;
+    options.candidateNodeLimit ??= options.nodeLimit;
+    for (const name of ['candidateTimeMs', 'candidateNodeLimit', 'timeMs', 'nodeLimit', 'maxMoves', 'rounds', 'seed']) {
+        if (!Number.isInteger(options[name]) || options[name] < (['timeMs', 'candidateTimeMs', 'seed'].includes(name) ? 0 : 1)) throw new Error(`无效参数：${name}`);
     }
-    if (options.maxMoves > 225 || options.rounds > 100 || options.timeMs > 60000) throw new Error('参数超出合理范围');
+    if (options.maxMoves > 225 || options.rounds > 100 || options.timeMs > 60000 || options.candidateTimeMs > 60000) throw new Error('参数超出合理范围');
     if (!options.baseline || !options.candidate || options.output === undefined) throw new Error('缺少参数值');
     return options;
 }
@@ -65,7 +67,7 @@ function runComparison(options) {
                     game.moveHistory = history.map(move => ({ ...move }));
                     const before = JSON.stringify(game.board);
                     const started = performance.now();
-                    const move = game.getSearchedMove(player, { timeLimit: options.timeMs, nodeLimit: options.nodeLimit, maxDepth: 6, rootWidth: 16 });
+                    const move = game.getSearchedMove(player, { timeLimit: identity === 'candidate' ? options.candidateTimeMs : options.timeMs, nodeLimit: identity === 'candidate' ? options.candidateNodeLimit : options.nodeLimit, maxDepth: 6, rootWidth: 16 });
                     timings[identity].push(performance.now() - started);
                     if (JSON.stringify(game.board) !== before) throw new Error(`${identity} 搜索改变棋盘`);
                     if (!move || !Number.isInteger(move.x) || !Number.isInteger(move.y) || board[move.x]?.[move.y] !== null) throw new Error(`${identity} 返回非法棋步`);
