@@ -104,3 +104,27 @@ test('函数调用返回候选外坐标时拒绝采用', async () => {
     assert.deepEqual(await game.getGrandmasterMove('white'), { x: 7, y: 7 });
     assert.match(game.lastMessage, /无法落子/);
 });
+
+
+test('连通性错误区分认证、余额、超时和网络，且不显示原始正文', () => {
+    const { game } = setup();
+    for (const [status, expected] of [[401, /密钥验证失败/], [402, /余额不足/], [429, /过于频繁/], [503, /服务暂时异常/]]) {
+        const text = game.describeLlmConnectionError({ status, body: 'sensitive-response', message: 'sensitive-response' });
+        assert.match(text, expected);
+        assert.ok(!text.includes('sensitive-response'));
+    }
+    assert.match(game.describeLlmConnectionError({ name: 'TimeoutError' }), /120 秒/);
+    assert.match(game.describeLlmConnectionError(new TypeError('Failed to fetch')), /网络、代理或跨域/);
+});
+
+test('测试失败的具体原因保留给状态面板，且释放按钮', async () => {
+    const { game } = setup();
+    game.llmConfig.apiKey = 'test-only';
+    game.showInfoMessage = text => { game.lastMessage = text; };
+    game.updateLlmConfigStatus = () => {};
+    game.postChatCompletion = async () => { throw { status: 401 }; };
+    await game.testLlmConnection();
+    assert.match(game.lastMessage, /401/);
+    assert.equal(game.llmConnectionError, game.lastMessage);
+    assert.equal(game.llmTestInFlight, false);
+});

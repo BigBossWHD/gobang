@@ -1054,7 +1054,7 @@ Object.assign(GomokuGame.prototype, {
         }
 
         if (statusOverride === 'error') {
-            statusNode.textContent = '连接失败，请核对端点、密钥、模型名称或网络';
+            statusNode.textContent = this.llmConnectionError || '连接失败，请核对端点、密钥、模型名称或网络';
             statusNode.classList.add('error');
             return;
         }
@@ -1078,7 +1078,7 @@ Object.assign(GomokuGame.prototype, {
         }
 
         if (this.llmConfigStatus === 'error') {
-            statusNode.textContent = '连接失败，请核对端点、密钥、模型名称或网络';
+            statusNode.textContent = this.llmConnectionError || '连接失败，请核对端点、密钥、模型名称或网络';
             statusNode.classList.add('error');
             return;
         }
@@ -1136,6 +1136,7 @@ Object.assign(GomokuGame.prototype, {
             return;
         }
 
+        this.llmConnectionError = '';
         this.llmTestInFlight = true;
         this.updateLlmTestButtonState();
         this.updateLlmConfigStatus('testing');
@@ -1180,14 +1181,43 @@ Object.assign(GomokuGame.prototype, {
                 this.updateLlmConfigStatus('error');
             }
         } catch (error) {
-            console.error('LLM connectivity test failed:', error);
-            this.showInfoMessage('测试超时或失败，请核对端点、密钥或网络。');
+            // 不回显服务端正文，避免错误响应携带用户密钥等信息。
+            this.llmConnectionError = this.describeLlmConnectionError(error);
+            this.showInfoMessage(this.llmConnectionError);
             this.llmConfigStatus = 'error';
             this.updateLlmConfigStatus('error');
         } finally {
             this.llmTestInFlight = false;
             this.updateLlmTestButtonState();
         }
+    },
+
+    describeLlmConnectionError(error) {
+        if (error?.name === 'TimeoutError') {
+            return '连接测试超时（等待 120 秒），请稍后重试或检查网络。';
+        }
+        if (error?.name === 'AbortError') {
+            return '连接测试已取消，请重新测试。';
+        }
+        const messages = {
+            400: '请求参数不被接口接受（HTTP 400），请核对端点和模型名称。',
+            401: '密钥验证失败（HTTP 401），请重新粘贴完整 API key。',
+            402: '账户余额不足（HTTP 402），请到 API 平台查看余额。',
+            403: '接口拒绝访问（HTTP 403），请检查账户权限或网络限制。',
+            404: '接口或模型不存在（HTTP 404），请核对端点和模型名称。',
+            422: '接口无法处理请求参数（HTTP 422），请核对模型支持的设置。',
+            429: '请求过于频繁（HTTP 429），请稍后再试。'
+        };
+        if (messages[error?.status]) {
+            return messages[error.status];
+        }
+        if (error?.status >= 500) {
+            return `模型服务暂时异常（HTTP ${error.status}），请稍后重试。`;
+        }
+        if (error?.status) {
+            return `接口返回异常响应（HTTP ${error.status}），请检查端点是否支持 Chat Completions。`;
+        }
+        return '浏览器未能取得接口响应：可能是网络、代理或跨域限制。若双击网页打开，请换 Chrome 或 Edge 重试。';
     },
 
     async postChatCompletion(requestUrl, payload, apiKey, options = {}) {
