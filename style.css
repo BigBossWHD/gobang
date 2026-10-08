@@ -798,3 +798,9 @@ body {
         width: 100%;
     }
 }
+.llm-key-note {
+    margin: 4px 0;
+    font-size: 12px;
+    line-height: 1.5;
+    color: #52647a;
+}

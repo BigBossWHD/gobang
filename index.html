@@ -46,12 +46,13 @@
                             </div>
                             <div class="llm-config-field">
                                 <label for="llm-api-key">API 密钥</label>
-                                <input id="llm-api-key" type="password" placeholder="请输入密钥">
+                                <input id="llm-api-key" type="password" placeholder="仅本次使用，不保存" autocomplete="off" spellcheck="false">
                             </div>
                             <div class="llm-config-field">
                                 <label for="llm-model">模型名称</label>
-                                <input id="llm-model" type="text" value="deepseek-v4-flash">
+                                <input id="llm-model" type="text" value="deepseek-flash">
                             </div>
+                            <p class="llm-key-note">密钥仅本次使用，不保存；刷新页面后需重新输入。</p>
                             <div class="llm-options-row">
                                 <label class="llm-toggle llm-inline-toggle">
                                     <input id="llm-thinking-enabled" type="checkbox" checked>
@@ -60,8 +61,8 @@
                                 <label class="llm-compact-select">
                                     <span>强度</span>
                                     <select id="llm-reasoning-effort">
-                                        <option value="high" selected>High</option>
-                                        <option value="max">Max</option>
+                                        <option value="high">High</option>
+                                        <option value="max" selected>Max</option>
                                     </select>
                                 </label>
                                 <label class="llm-toggle llm-inline-toggle">

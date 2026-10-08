@@ -65,7 +65,7 @@ Object.assign(GomokuGame.prototype, {
                 const extracted = this.extractGrandmasterResponse(data);
                 if (extracted && extracted.move && Number.isInteger(extracted.move.x) && Number.isInteger(extracted.move.y)) {
                     const { x, y } = extracted.move;
-                    if (this.isCellAvailable(x, y)) {
+                    if (this.isGrandmasterCandidate(x, y)) {
                         const stabilizedMove = this.stabilizeGrandmasterMove(aiPlayer, { x, y });
                         if (stabilizedMove) {
                             const isReplaced = stabilizedMove.x !== x || stabilizedMove.y !== y;
@@ -96,12 +96,16 @@ Object.assign(GomokuGame.prototype, {
 
             this.showInfoMessage('大模型建议的坐标无法落子，改用困难难度继续对决。');
         } catch (error) {
+            if (requestId !== this.activeLlmRequestId) {
+                return null;
+            }
             if (error && error.name === 'AbortError') {
-                this.showInfoMessage('大模型请求已取消。');
                 return null;
             }
             console.error('Grandmaster LLM move failed:', error);
-            this.showInfoMessage('大模型调用超时或失败，暂以困难难度应对。');
+            this.showInfoMessage(error && error.name === 'TimeoutError'
+                ? '大模型等待超时，已改由困难 AI 继续落子。'
+                : '大模型调用失败，已改由困难 AI 继续落子。');
         } finally {
             if (requestId === this.activeLlmRequestId) {
                 this.llmRequestInFlight = false;
@@ -111,7 +115,7 @@ Object.assign(GomokuGame.prototype, {
             }
         }
 
-        return this.getHardMove(aiPlayer);
+        return this.getHardMoveAsync(aiPlayer);
     },
 
     buildGrandmasterRequestPayload(aiPlayer) {
@@ -1137,10 +1141,12 @@ Object.assign(GomokuGame.prototype, {
         this.updateLlmConfigStatus('testing');
         this.showInfoMessage('正在测试大模型连通性…');
 
-        const payload = this.withThinkingOptions({
+        // 连通性检测不消耗思考预算；对局仍使用玩家选择的思考设置。
+        const payload = {
             model,
             temperature: 0.1,
             max_tokens: 128,
+            thinking: { type: 'disabled' },
             stream: false,
             response_format: { type: 'json_object' },
             messages: [
@@ -1153,7 +1159,7 @@ Object.assign(GomokuGame.prototype, {
                     content: '仅用于测试，请直接返回 {"status":"ok"}，不要附加其他内容。'
                 }
             ]
-        });
+        };
 
         try {
             const { data } = await this.postChatCompletion(requestUrl, payload, apiKey, {
@@ -1196,6 +1202,7 @@ Object.assign(GomokuGame.prototype, {
         const perform = async (body) => {
             const requestController = new AbortController();
             let timeoutId = null;
+            let timedOut = false;
             const abortRequest = () => {
                 requestController.abort();
             };
@@ -1210,6 +1217,7 @@ Object.assign(GomokuGame.prototype, {
 
             if (timeoutMs > 0) {
                 timeoutId = window.setTimeout(() => {
+                    timedOut = true;
                     requestController.abort();
                 }, timeoutMs);
             }
@@ -1234,6 +1242,13 @@ Object.assign(GomokuGame.prototype, {
                     }
                 }
                 return { response, rawText, data };
+            } catch (error) {
+                if (timedOut && !signal?.aborted) {
+                    const timeoutError = new Error('大模型请求等待超时');
+                    timeoutError.name = 'TimeoutError';
+                    throw timeoutError;
+                }
+                throw error;
             } finally {
                 if (timeoutId) {
                     window.clearTimeout(timeoutId);

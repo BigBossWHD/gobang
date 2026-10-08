@@ -22,15 +22,15 @@ class GomokuGame {
         this.llmConfig = {
             endpoint: 'https://api.deepseek.com/v1',
             apiKey: '',
-            model: 'deepseek-v4-flash',
+            model: 'deepseek-flash',
             thinkingEnabled: true,
-            reasoningEffort: 'high',
+            reasoningEffort: 'max',
             useReasoningFallback: true
         };
         this.llmRequestInFlight = false;
         this.llmTestInFlight = false;
         this.llmAbortController = null;
-        this.llmRequestTimeoutMs = 20000;
+        this.llmRequestTimeoutMs = 120000;
         this.llmConfigStatus = 'idle';
         this.masterSystemPrompt = this.createGrandmasterSystemPrompt();
         this.messageState = 'idle';
@@ -693,7 +693,7 @@ class GomokuGame {
     }
 
     restoreLlmConfig() {
-        if (typeof window === 'undefined' || !window.localStorage) {
+        if (typeof window === 'undefined') {
             return;
         }
 
@@ -703,34 +703,44 @@ class GomokuGame {
                 return;
             }
             const parsed = JSON.parse(raw);
+            const endpoint = typeof parsed.endpoint === 'string' ? parsed.endpoint : 'https://api.deepseek.com/v1';
+            // 仅迁移官方端点的旧默认名称，保留第三方服务的自定义模型。
+            const migrateLegacyModel = parsed.model === 'deepseek-v4-flash'
+                && /^https:\/\/api\.deepseek\.com(?::443)?(?:\/|$)/i.test(endpoint.trim());
             this.llmConfig = {
-                endpoint: typeof parsed.endpoint === 'string' ? parsed.endpoint : 'https://api.deepseek.com/v1',
-                apiKey: typeof parsed.apiKey === 'string' ? parsed.apiKey : '',
-                model: typeof parsed.model === 'string' ? parsed.model : 'deepseek-v4-flash',
+                endpoint,
+                apiKey: '',
+                model: migrateLegacyModel ? 'deepseek-flash'
+                    : (typeof parsed.model === 'string' ? parsed.model : 'deepseek-flash'),
                 thinkingEnabled: typeof parsed.thinkingEnabled === 'boolean' ? parsed.thinkingEnabled : true,
-                reasoningEffort: parsed.reasoningEffort === 'max' ? 'max' : 'high',
+                reasoningEffort: parsed.reasoningEffort === 'high' ? 'high' : 'max',
                 useReasoningFallback: typeof parsed.useReasoningFallback === 'boolean' ? parsed.useReasoningFallback : true
             };
+            if (migrateLegacyModel || Object.prototype.hasOwnProperty.call(parsed, 'apiKey')) {
+                this.persistLlmConfig();
+            }
         } catch (error) {
             console.error('Failed to restore LLM config:', error);
             this.llmConfig = {
                 endpoint: 'https://api.deepseek.com/v1',
                 apiKey: '',
-                model: 'deepseek-v4-flash',
+                model: 'deepseek-flash',
                 thinkingEnabled: true,
-                reasoningEffort: 'high',
+                reasoningEffort: 'max',
                 useReasoningFallback: true
             };
         }
     }
 
     persistLlmConfig() {
-        if (typeof window === 'undefined' || !window.localStorage) {
+        if (typeof window === 'undefined') {
             return;
         }
 
         try {
-            window.localStorage.setItem('gomoku.llmConfig', JSON.stringify(this.llmConfig));
+            // 密钥只保留在本次页面内存中，绝不写入浏览器存储。
+            const { apiKey, ...savedConfig } = this.llmConfig;
+            window.localStorage.setItem('gomoku.llmConfig', JSON.stringify(savedConfig));
         } catch (error) {
             console.error('Failed to persist LLM config:', error);
         }
